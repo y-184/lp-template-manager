@@ -65,6 +65,134 @@ SECTION_LABELS = {
     "faq": "よくある質問"
 }
 
+# ===== JSON抽出ユーティリティ関数 =====
+
+def safe_get_nested(data, path, default=None):
+    """
+    ネストされたJSONから値を安全に取得
+    例: safe_get_nested(data, "content.title", "デフォルト値")
+    """
+    if not isinstance(data, dict):
+        return default
+    
+    keys = path.split('.')
+    current = data
+    
+    for key in keys:
+        if isinstance(current, dict) and key in current:
+            current = current[key]
+        else:
+            return default
+    
+    return current if current is not None else default
+
+def extract_features_data(template):
+    """機能紹介セクション用データ抽出"""
+    content = template.get('content', {})
+    
+    title = safe_get_nested(content, 'title', '主要機能')
+    subtitle = safe_get_nested(content, 'subtitle', '')
+    
+    # 機能リスト抽出 - feature_categoriesまたはfeaturesに対応
+    features = []
+    
+    # 詳細構造: feature_categories
+    feature_categories = safe_get_nested(content, 'feature_categories', [])
+    if isinstance(feature_categories, list):
+        for category in feature_categories:
+            if isinstance(category, dict):
+                category_features = category.get('features', [])
+                if isinstance(category_features, list):
+                    for feature in category_features:
+                        if isinstance(feature, dict):
+                            name = feature.get('feature_name', '')
+                            desc = feature.get('feature_description', '')
+                            benefit = feature.get('benefit', '')
+                            if name:
+                                features.append({
+                                    'name': name, 
+                                    'description': desc,
+                                    'benefit': benefit
+                                })
+    
+    # シンプル構造: features
+    if not features:
+        simple_features = safe_get_nested(content, 'features', [])
+        if isinstance(simple_features, list):
+            for feature in simple_features:
+                if isinstance(feature, str):
+                    features.append({'name': feature, 'description': '', 'benefit': ''})
+                elif isinstance(feature, dict):
+                    features.append({
+                        'name': feature.get('name', feature.get('feature_name', '')),
+                        'description': feature.get('description', feature.get('feature_description', '')),
+                        'benefit': feature.get('benefit', '')
+                    })
+    
+    return {
+        'title': title,
+        'subtitle': subtitle,
+        'features': features
+    }
+
+def extract_testimonials_data(template):
+    """お客様の声セクション用データ抽出"""
+    content = template.get('content', {})
+    
+    title = safe_get_nested(content, 'title', 'お客様の声')
+    subtitle = safe_get_nested(content, 'subtitle', '')
+    
+    # 証言抽出
+    testimonials = []
+    raw_testimonials = safe_get_nested(content, 'testimonials', [])
+    
+    if isinstance(raw_testimonials, list):
+        for testimonial in raw_testimonials:
+            if isinstance(testimonial, dict):
+                testimonials.append({
+                    'name': testimonial.get('customer_name', '【お客様名】'),
+                    'title': testimonial.get('customer_title', ''),
+                    'company': testimonial.get('company_name', '【企業名】'),
+                    'text': testimonial.get('testimonial_text', ''),
+                    'rating': testimonial.get('rating', 5),
+                    'achievement': testimonial.get('key_achievement', '')
+                })
+    
+    # デフォルトデータ
+    if not testimonials:
+        testimonials = [
+            {
+                'name': '【お客様A】',
+                'title': '【役職】',
+                'company': '【A社】',
+                'text': '導入により業務効率が大幅に向上しました。直感的な操作で、チーム全体がすぐに使いこなせるようになりました。',
+                'rating': 5,
+                'achievement': '業務効率40%向上'
+            },
+            {
+                'name': '【お客様B】',
+                'title': '【役職】', 
+                'company': '【B社】',
+                'text': '以前は手作業で時間がかかっていた作業が、自動化により大幅に短縮されました。ROIも期待以上です。',
+                'rating': 5,
+                'achievement': '作業時間50%削減'
+            },
+            {
+                'name': '【お客様C】',
+                'title': '【役職】',
+                'company': '【C社】',
+                'text': 'サポート体制も充実しており、導入から運用まで安心して進められました。',
+                'rating': 5,
+                'achievement': '導入コスト30%削減'
+            }
+        ]
+    
+    return {
+        'title': title,
+        'subtitle': subtitle,
+        'testimonials': testimonials
+    }
+
 # ===== セッションステート初期化 =====
 
 def init_session_state():
@@ -268,10 +396,40 @@ def generate_hero_preview(template, brand_color="#2563EB"):
     bg_color = colors.get('background', template.get('layout', {}).get('background_color', '#F8FAFC'))
     
     content = template.get('content', {})
-    title = content.get('title', '').replace('\\n', '<br>')
+    
+    # タイトル取得（\nを<br>に変換）
+    title = content.get('title', '').replace('\\n', '<br>').replace('\n', '<br>')
     subtitle = content.get('subtitle', '')
-    cta_label = content.get('cta_label', '')
-    features = content.get('features', [])
+    
+    # CTA取得 - cta_buttonsとcta_label両方に対応
+    cta_label = ''
+    cta_buttons = content.get('cta_buttons', [])
+    if isinstance(cta_buttons, list) and len(cta_buttons) > 0:
+        # primary typeのボタンを探す
+        primary_cta = next((btn for btn in cta_buttons if isinstance(btn, dict) and btn.get('type') == 'primary'), None)
+        if primary_cta:
+            cta_label = primary_cta.get('label', '')
+    
+    # 従来のcta_labelもサポート
+    if not cta_label:
+        cta_label = content.get('cta_label', '')
+    
+    # Features取得 - trust_badgesとfeatures両方に対応
+    features = []
+    
+    # trust_badgesから取得
+    trust_badges = content.get('trust_badges', [])
+    if isinstance(trust_badges, list):
+        for badge in trust_badges:
+            if isinstance(badge, dict):
+                primary_text = badge.get('primary_text', '').replace('\n', ' ').replace('\\n', ' ')
+                highlight = badge.get('highlight', '')
+                if primary_text and highlight:
+                    features.append(f"{primary_text} {highlight}")
+    
+    # 従来のfeaturesもサポート
+    if not features:
+        features = content.get('features', [])
     
     html = f"""
     <!DOCTYPE html>
@@ -427,10 +585,11 @@ def generate_features_preview(template, brand_color="#2563EB"):
     primary_color = colors.get('primary', brand_color)
     bg_color = colors.get('background', template.get('layout', {}).get('background_color', '#FFFFFF'))
     
-    content = template.get('content', {})
-    title = content.get('title', '')
-    subtitle = content.get('subtitle', '')
-    features = content.get('features', [])
+    # 詳細JSON対応のデータ抽出
+    extracted = extract_features_data(template)
+    title = extracted['title']
+    subtitle = extracted['subtitle']
+    features = extracted['features']
     
     html = f"""
     <!DOCTYPE html>
@@ -541,18 +700,21 @@ def generate_features_preview(template, brand_color="#2563EB"):
     for feature in features:
         if isinstance(feature, dict):
             icon = feature.get('icon', '🔧')
-            f_title = feature.get('title', '')
+            f_title = feature.get('name', feature.get('title', ''))
             description = feature.get('description', '')
+            benefit = feature.get('benefit', '')
         else:
             icon = '🔧'
             f_title = str(feature)
             description = f'{feature}の詳細説明がここに入ります。'
+            benefit = ''
         
         html += f"""
                     <div class="feature-card">
                         <span class="feature-icon">{icon}</span>
                         <h3 class="feature-title">{f_title}</h3>
                         <p class="feature-description">{description}</p>
+                        {f'<p class="feature-benefit" style="color: {primary_color}; font-weight: 600; font-size: 0.9rem; margin-top: 12px;">✓ {benefit}</p>' if benefit else ''}
                     </div>
         """
     
@@ -571,10 +733,11 @@ def generate_testimonials_preview(template, brand_color="#2563EB"):
     primary_color = colors.get('primary', brand_color)
     bg_color = colors.get('background', template.get('layout', {}).get('background_color', '#F9FAFB'))
     
-    content = template.get('content', {})
-    title = content.get('title', '')
-    subtitle = content.get('subtitle', '')
-    testimonials = content.get('testimonials', [])
+    # 詳細JSON対応のデータ抽出
+    extracted = extract_testimonials_data(template)
+    title = extracted['title']
+    subtitle = extracted['subtitle']
+    testimonials = extracted['testimonials']
     
     html = f"""
     <!DOCTYPE html>
@@ -713,9 +876,11 @@ def generate_testimonials_preview(template, brand_color="#2563EB"):
     for testimonial in testimonials:
         if isinstance(testimonial, dict):
             rating = testimonial.get('rating', 5)
-            comment = testimonial.get('comment', '')
+            comment = testimonial.get('text', testimonial.get('comment', ''))
             name = testimonial.get('name', '')
             company = testimonial.get('company', '')
+            title_role = testimonial.get('title', '')
+            achievement = testimonial.get('achievement', '')
             avatar = testimonial.get('avatar', '👤')
         else:
             rating = 5
@@ -735,8 +900,9 @@ def generate_testimonials_preview(template, brand_color="#2563EB"):
                         <div class="testimonial-author">
                             <div class="author-avatar">{avatar}</div>
                             <div class="author-info">
-                                <div class="author-name">{name}</div>
+                                <div class="author-name">{name} {title_role}</div>
                                 <div class="author-company">{company}</div>
+                                {f'<div class="author-achievement" style="color: {primary_color}; font-size: 0.85rem; font-weight: 600; margin-top: 4px;">{achievement}</div>' if achievement else ''}
                             </div>
                         </div>
                     </div>
