@@ -404,7 +404,7 @@ def generate_hero_preview(template, brand_color="#2563EB"):
                     </h1>
                     <p class="hero-subtitle">{subtitle}</p>
                     
-                    {f'<div class="hero-features">{"".join([f\'<div class="feature-badge">{feature}</div>\' for feature in features])}</div>' if features else ''}
+                    {'<div class="hero-features">' + ''.join([f'<div class="feature-badge">{feature}</div>' for feature in features]) + '</div>' if features else ''}
                     
                     {f'<button class="hero-cta">{cta_label}</button>' if cta_label else ''}
                 </div>
