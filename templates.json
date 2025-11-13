@@ -1,0 +1,34 @@
+{
+  "templates": [
+    {
+      "template_id": "sample_header_001",
+      "display_name": "BtoB SaaS向けクリーンヘッダー",
+      "section_type": "header",
+      "status": "approved",
+      "metadata": {
+        "source_url": "https://example.com",
+        "description": "シンプルで迷わないヘッダー構成。BtoB向け。",
+        "screenshot_url": "",
+        "tags": ["BtoB", "SaaS", "シンプル"],
+        "created_by": "ichihashi",
+        "created_at": "2025-01-13",
+        "updated_at": "2025-01-13",
+        "review_comment": ""
+      },
+      "layout": {
+        "alignment": "center",
+        "background_color": "#F8FAFC",
+        "image_url": ""
+      },
+      "content": {
+        "title": "革新的なマーケティングオートメーション",
+        "subtitle": "リード獲得から受注まで、業務効率を3倍に",
+        "bullets": [],
+        "cta_label": "無料で試してみる",
+        "price_table": [],
+        "form_fields": []
+      },
+      "notes": "サンプルテンプレート"
+    }
+  ]
+}
