@@ -67,6 +67,10 @@ def init_session_state():
                     "notes": "サンプルテンプレート"
                 }
             ]
+    
+    # 編集中テンプレートID
+    if "editing_template_id" not in st.session_state:
+        st.session_state.editing_template_id = None
 
 # 初期化実行
 init_session_state()
@@ -77,6 +81,13 @@ def get_templates():
     """テンプレートデータを取得"""
     return st.session_state.templates
 
+def get_template_by_id(template_id):
+    """IDでテンプレートを取得"""
+    for template in st.session_state.templates:
+        if template["template_id"] == template_id:
+            return template
+    return None
+
 def add_template(template):
     """テンプレートを追加"""
     st.session_state.templates.append(template)
@@ -86,6 +97,7 @@ def update_template(template_id, updates):
     for i, template in enumerate(st.session_state.templates):
         if template["template_id"] == template_id:
             st.session_state.templates[i].update(updates)
+            st.session_state.templates[i]["metadata"]["updated_at"] = datetime.now().strftime("%Y-%m-%d")
             break
 
 def delete_template(template_id):
@@ -98,6 +110,61 @@ def delete_template(template_id):
 def export_templates_json():
     """JSON形式でエクスポート"""
     return json.dumps({"templates": st.session_state.templates}, ensure_ascii=False, indent=2)
+
+# ===== プレビュー生成関数 =====
+
+def generate_template_preview(template, brand_color="#2563EB"):
+    """テンプレートのHTMLプレビューを生成"""
+    bg_color = template['layout'].get('background_color', '#FFFFFF')
+    alignment = template['layout'].get('alignment', 'center')
+    
+    html = f"""
+    <div style="max-width: 1200px; margin: 0 auto; background: {bg_color}; padding: 60px 40px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <div style="text-align: {alignment};">
+    """
+    
+    # タイトル
+    if template['content'].get('title'):
+        html += f"""
+        <h2 style="font-size: 2.5rem; font-weight: bold; color: #1F2937; margin-bottom: 16px;">
+            {template['content']['title']}
+        </h2>
+        """
+    
+    # サブタイトル
+    if template['content'].get('subtitle'):
+        html += f"""
+        <p style="font-size: 1.25rem; color: #6B7280; margin-bottom: 24px;">
+            {template['content']['subtitle']}
+        </p>
+        """
+    
+    # 箇条書き（お悩みセクション用）
+    if template['content'].get('bullets') and len(template['content']['bullets']) > 0:
+        html += '<div style="text-align: left; max-width: 600px; margin: 0 auto 24px;">'
+        for bullet in template['content']['bullets']:
+            html += f"""
+            <div style="display: flex; align-items: start; margin-bottom: 12px;">
+                <span style="color: {brand_color}; margin-right: 12px; font-size: 1.5rem;">✓</span>
+                <span style="color: #374151; font-size: 1.1rem;">{bullet}</span>
+            </div>
+            """
+        html += '</div>'
+    
+    # CTAボタン
+    if template['content'].get('cta_label'):
+        html += f"""
+        <button style="background: {brand_color}; color: white; padding: 14px 36px; border-radius: 8px; border: none; font-size: 1.1rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+            {template['content']['cta_label']}
+        </button>
+        """
+    
+    html += """
+        </div>
+    </div>
+    """
+    
+    return html
 
 # ===== メインUI =====
 
@@ -210,123 +277,226 @@ def show_template_registration():
     st.markdown("## 📝 テンプレート登録")
     st.markdown("良いLP事例を構造化してテンプレートとして保存します。")
     
-    col1, col2 = st.columns([1, 1])
+    # タブで3ステップを分ける
+    tab1, tab2, tab3 = st.tabs(["Step 1: 基本情報", "Step 2: プロンプト生成", "Step 3: JSON入力・プレビュー"])
     
-    with col1:
-        st.markdown("### Step 1: 基本情報入力")
+    # Step 1: 基本情報入力
+    with tab1:
+        col1, col2 = st.columns([1, 1])
         
-        display_name = st.text_input("テンプレート名", placeholder="例: BtoB SaaS向けクリーンヘッダー")
+        with col1:
+            st.markdown("### 基本情報入力")
+            
+            display_name = st.text_input("テンプレート名", placeholder="例: BtoB SaaS向けクリーンヘッダー", key="reg_name")
+            
+            section_type = st.selectbox(
+                "セクション種別",
+                ["header", "trouble", "pricing", "cta", "form"],
+                key="reg_section"
+            )
+            
+            source_url = st.text_input("参照URL", placeholder="https://example.com/lp", key="reg_url")
+            
+            description = st.text_area(
+                "一言メモ",
+                placeholder="このテンプレートの特徴や使いどころを記載",
+                height=100,
+                key="reg_desc"
+            )
+            
+            screenshot_url = st.text_input("参考画像URL（任意）", placeholder="https://...", key="reg_img")
+            
+            tags_input = st.text_input("タグ（カンマ区切り）", placeholder="BtoB, SaaS, シンプル", key="reg_tags")
+            
+            if st.button("💾 基本情報を保存", type="primary", use_container_width=True):
+                if not display_name:
+                    st.error("⚠️ テンプレート名を入力してください")
+                else:
+                    tags = [tag.strip() for tag in tags_input.split(",")] if tags_input else []
+                    
+                    # セッションに保存
+                    st.session_state.draft_template = {
+                        "template_id": str(uuid.uuid4()),
+                        "display_name": display_name,
+                        "section_type": section_type,
+                        "status": "draft",
+                        "metadata": {
+                            "source_url": source_url,
+                            "description": description,
+                            "screenshot_url": screenshot_url,
+                            "tags": tags,
+                            "created_by": "user",
+                            "created_at": datetime.now().strftime("%Y-%m-%d"),
+                            "updated_at": datetime.now().strftime("%Y-%m-%d"),
+                            "review_comment": ""
+                        },
+                        "layout": {
+                            "alignment": "center",
+                            "background_color": "#FFFFFF",
+                            "image_url": ""
+                        },
+                        "content": {
+                            "title": "",
+                            "subtitle": "",
+                            "bullets": [],
+                            "cta_label": "",
+                            "price_table": [],
+                            "form_fields": []
+                        },
+                        "notes": ""
+                    }
+                    
+                    st.success("✅ 基本情報を保存しました！「Step 2」でプロンプトを生成してください。")
         
-        section_type = st.selectbox(
-            "セクション種別",
-            ["header", "trouble", "pricing", "cta", "form"]
-        )
-        
-        source_url = st.text_input("参照URL", placeholder="https://example.com/lp")
-        
-        description = st.text_area(
-            "一言メモ",
-            placeholder="このテンプレートの特徴や使いどころを記載",
-            height=100
-        )
-        
-        screenshot_url = st.text_input("参考画像URL（任意）", placeholder="https://...")
-        
-        tags_input = st.text_input("タグ（カンマ区切り）", placeholder="BtoB, SaaS, シンプル")
-        tags = [tag.strip() for tag in tags_input.split(",")] if tags_input else []
-        
-        if st.button("💾 下書き保存", type="primary", use_container_width=True):
-            if not display_name:
-                st.error("⚠️ テンプレート名を入力してください")
-            else:
-                # 新規テンプレート作成
-                new_template = {
-                    "template_id": str(uuid.uuid4()),
-                    "display_name": display_name,
-                    "section_type": section_type,
-                    "status": "draft",
-                    "metadata": {
-                        "source_url": source_url,
-                        "description": description,
-                        "screenshot_url": screenshot_url,
-                        "tags": tags,
-                        "created_by": "user",
-                        "created_at": datetime.now().strftime("%Y-%m-%d"),
-                        "updated_at": datetime.now().strftime("%Y-%m-%d"),
-                        "review_comment": ""
-                    },
-                    "layout": {
-                        "alignment": "center",
-                        "background_color": "#FFFFFF",
-                        "image_url": ""
-                    },
-                    "content": {
-                        "title": "",
-                        "subtitle": "",
-                        "bullets": [],
-                        "cta_label": "",
-                        "price_table": [],
-                        "form_fields": []
-                    },
-                    "notes": ""
-                }
-                
-                # データ保存
-                add_template(new_template)
-                
-                st.success("✅ 下書きとして保存しました！")
-                st.balloons()
+        with col2:
+            st.markdown("### 💡 ヒント")
+            st.info("""
+            **テンプレート名のコツ**
+            - ターゲット業界を含める
+            - デザインの特徴を一言で
+            
+            **タグ付けのコツ**
+            - 業界（BtoB, EC, 採用）
+            - デザイン（シンプル, リッチ）
+            - 用途（リード獲得, 認知）
+            """)
     
-    with col2:
-        st.markdown("### Step 2: ChatGPT用プロンプト生成")
+    # Step 2: プロンプト生成
+    with tab2:
+        st.markdown("### ChatGPT用プロンプト生成")
         
-        st.info("💡 次のステップ: このプロンプトをChatGPTに投げてJSONを生成してもらいます")
-        
-        # プロンプト自動生成
-        if display_name and section_type:
+        if "draft_template" not in st.session_state:
+            st.warning("⚠️ 先に「Step 1」で基本情報を入力してください")
+        else:
+            draft = st.session_state.draft_template
+            
+            st.success(f"✅ テンプレート「{draft['display_name']}」の基本情報を読み込みました")
+            
+            # プロンプト生成
             prompt = f"""以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
 
 【基本情報】
-- セクション種別: {section_type}
-- 参照URL: {source_url}
-- 説明: {description}
+- テンプレート名: {draft['display_name']}
+- セクション種別: {draft['section_type']}
+- 参照URL: {draft['metadata']['source_url']}
+- 説明: {draft['metadata']['description']}
 
 【出力すべきJSON項目】
-- title: メインコピー
-- subtitle: サブコピー
-- bullets: 箇条書き項目（配列）
-- cta_label: CTAボタンのテキスト
-- alignment: レイアウト（left/center/right）
-- background_color: 背景色（HEXコード）
+```json
+{{
+  "title": "メインコピー（必須）",
+  "subtitle": "サブコピー",
+  "bullets": ["箇条書き1", "箇条書き2"],
+  "cta_label": "CTAボタンのテキスト",
+  "alignment": "center",
+  "background_color": "#FFFFFF"
+}}
+```
 
 【注意事項】
 - 著作権に配慮し、コピーは抽象化・一般化してください
 - 構造とレイアウトのパターンのみを抽出してください
 - 固有名詞は汎用的な表現に置き換えてください
+- {draft['section_type']}セクションとして機能する内容にしてください
 
-以下の形式でJSONを出力してください：
-```json
-{{
-  "title": "",
-  "subtitle": "",
-  "bullets": [],
-  "cta_label": "",
-  "alignment": "center",
-  "background_color": "#FFFFFF"
-}}
-```
+上記JSON形式で出力してください。
 """
             
             st.code(prompt, language="text")
             
-            st.download_button(
-                label="📋 プロンプトをダウンロード",
-                data=prompt,
-                file_name="chatgpt_prompt.txt",
-                mime="text/plain"
-            )
+            col1, col2 = st.columns(2)
+            with col1:
+                st.download_button(
+                    label="📋 プロンプトをダウンロード",
+                    data=prompt,
+                    file_name="chatgpt_prompt.txt",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+            with col2:
+                if st.button("➡️ Step 3へ進む", type="primary", use_container_width=True):
+                    st.info("「Step 3: JSON入力・プレビュー」タブに移動してください")
+    
+    # Step 3: JSON入力・プレビュー
+    with tab3:
+        st.markdown("### JSON入力・プレビュー")
+        
+        if "draft_template" not in st.session_state:
+            st.warning("⚠️ 先に「Step 1」で基本情報を入力してください")
         else:
-            st.warning("⚠️ 基本情報を入力するとプロンプトが生成されます")
+            draft = st.session_state.draft_template
+            
+            st.info(f"💡 ChatGPTから返ってきたJSONを貼り付けてください（テンプレート：{draft['display_name']}）")
+            
+            col1, col2 = st.columns([1, 1])
+            
+            with col1:
+                st.markdown("#### JSON入力")
+                
+                json_input = st.text_area(
+                    "ChatGPT出力JSON",
+                    height=300,
+                    placeholder='{\n  "title": "...",\n  "subtitle": "...",\n  ...\n}',
+                    key="json_input"
+                )
+                
+                if st.button("👁️ プレビュー生成", use_container_width=True):
+                    try:
+                        # JSON解析
+                        content_data = json.loads(json_input)
+                        
+                        # ドラフトテンプレートを更新
+                        st.session_state.draft_template["content"].update(content_data)
+                        if "alignment" in content_data:
+                            st.session_state.draft_template["layout"]["alignment"] = content_data["alignment"]
+                        if "background_color" in content_data:
+                            st.session_state.draft_template["layout"]["background_color"] = content_data["background_color"]
+                        
+                        st.success("✅ JSONを解析しました。右側でプレビューを確認してください。")
+                        st.session_state.show_preview = True
+                        
+                    except json.JSONDecodeError as e:
+                        st.error(f"⚠️ JSON形式エラー: {str(e)}")
+                    except Exception as e:
+                        st.error(f"⚠️ エラー: {str(e)}")
+            
+            with col2:
+                st.markdown("#### プレビュー")
+                
+                if st.session_state.get("show_preview", False):
+                    # プレビュー表示
+                    html_preview = generate_template_preview(st.session_state.draft_template)
+                    st.components.v1.html(html_preview, height=400, scrolling=True)
+                    
+                    st.markdown("---")
+                    
+                    # 承認アクション
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if st.button("✅ 承認してテンプレート登録", type="primary", use_container_width=True):
+                            st.session_state.draft_template["status"] = "approved"
+                            add_template(st.session_state.draft_template)
+                            
+                            st.success("🎉 テンプレートを承認・登録しました！")
+                            st.balloons()
+                            
+                            # クリーンアップ
+                            del st.session_state.draft_template
+                            del st.session_state.show_preview
+                            st.rerun()
+                    
+                    with col_b:
+                        if st.button("📝 下書きとして保存", use_container_width=True):
+                            add_template(st.session_state.draft_template)
+                            
+                            st.success("💾 下書きとして保存しました。「テンプレート一覧」から編集できます。")
+                            
+                            # クリーンアップ
+                            del st.session_state.draft_template
+                            del st.session_state.show_preview
+                            st.rerun()
+                else:
+                    st.info("左側でJSONを入力して「プレビュー生成」ボタンを押してください")
 
 def show_page_builder():
     """LP作成画面"""
@@ -400,31 +570,16 @@ def show_page_builder():
                 if template['content']['cta_label']:
                     wireframe += f"- CTA: {template['content']['cta_label']}\n"
             
-            st.text_area("テキスト構造", wireframe, height=300)
+            st.text_area("テキスト構造", wireframe, height=200)
             
             st.markdown("---")
             st.markdown("#### デザインプレビュー")
             
-            # 簡易HTMLプレビュー
-            html_preview = f"""
-            <div style="max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-            """
+            # 統合HTMLプレビュー
+            html_preview = '<div style="max-width: 1200px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">'
             
             for section_type, template in sections.items():
-                bg_color = template['layout'].get('background_color', '#FFFFFF')
-                html_preview += f"""
-                <div style="padding: 60px 40px; background: {bg_color}; border-bottom: 1px solid #E5E7EB;">
-                    <div style="text-align: {template['layout']['alignment']};">
-                        <h2 style="font-size: 2.5rem; font-weight: bold; color: #1F2937; margin-bottom: 16px;">
-                            {template['content']['title']}
-                        </h2>
-                        <p style="font-size: 1.25rem; color: #6B7280; margin-bottom: 24px;">
-                            {template['content']['subtitle']}
-                        </p>
-                        {f'<button style="background: {brand_color}; color: white; padding: 12px 32px; border-radius: 6px; border: none; font-size: 1.1rem; cursor: pointer;">{template["content"]["cta_label"]}</button>' if template['content']['cta_label'] else ''}
-                    </div>
-                </div>
-                """
+                html_preview += generate_template_preview(template, brand_color).replace('<div style="max-width: 1200px; margin: 0 auto;', '<div style="').replace('</div>', '', 1)
             
             html_preview += "</div>"
             
@@ -478,40 +633,124 @@ def show_template_list():
         }
         bg_class, text_class = status_colors.get(template["status"], ("bg-gray-100", "text-gray-800"))
         
-        st.markdown(f"""
-        <div class="bg-white rounded-lg shadow-md p-6 mb-4 border border-gray-200">
-            <div class="flex justify-between items-start mb-4">
-                <div>
-                    <h3 class="text-xl font-bold text-gray-800">{template['display_name']}</h3>
-                    <p class="text-gray-600 mt-2">{template['metadata']['description']}</p>
+        with st.container():
+            st.markdown(f"""
+            <div class="bg-white rounded-lg shadow-md p-6 mb-4 border border-gray-200">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-800">{template['display_name']}</h3>
+                        <p class="text-gray-600 mt-2">{template['metadata']['description']}</p>
+                    </div>
+                    <span class="px-3 py-1 {bg_class} {text_class} rounded-full text-sm font-semibold">
+                        {template['status']}
+                    </span>
                 </div>
-                <span class="px-3 py-1 {bg_class} {text_class} rounded-full text-sm font-semibold">
-                    {template['status']}
-                </span>
+                <div class="flex gap-2 mb-3">
+                    <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">{template['section_type']}</span>
+                    {''.join([f'<span class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{tag}</span>' for tag in template['metadata']['tags']])}
+                </div>
+                <div class="text-sm text-gray-500">
+                    作成日: {template['metadata']['created_at']} | ID: {template['template_id'][:8]}...
+                </div>
             </div>
-            <div class="flex gap-2 mb-3">
-                <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs">{template['section_type']}</span>
-                {''.join([f'<span class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{tag}</span>' for tag in template['metadata']['tags']])}
-            </div>
-            <div class="text-sm text-gray-500">
-                作成日: {template['metadata']['created_at']} | ID: {template['template_id'][:8]}...
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # アクション
-        col1, col2, col3 = st.columns([1, 1, 4])
-        with col1:
-            if template["status"] == "draft":
-                if st.button("✅ 承認", key=f"approve_{template['template_id']}"):
-                    update_template(template['template_id'], {"status": "approved"})
-                    st.success("承認しました！")
+            """, unsafe_allow_html=True)
+            
+            # アクション
+            col1, col2, col3, col4 = st.columns([1, 1, 1, 3])
+            with col1:
+                if st.button("👁️ 表示", key=f"view_{template['template_id']}"):
+                    st.session_state.editing_template_id = template['template_id']
                     st.rerun()
+            with col2:
+                if template["status"] == "draft":
+                    if st.button("✅ 承認", key=f"approve_{template['template_id']}"):
+                        update_template(template['template_id'], {"status": "approved"})
+                        st.success("承認しました！")
+                        st.rerun()
+            with col3:
+                if st.button("🗑️ 削除", key=f"delete_{template['template_id']}"):
+                    delete_template(template['template_id'])
+                    st.success("削除しました！")
+                    st.rerun()
+    
+    # テンプレート詳細モーダル
+    if st.session_state.editing_template_id:
+        show_template_detail_modal()
+
+def show_template_detail_modal():
+    """テンプレート詳細・編集モーダル"""
+    template_id = st.session_state.editing_template_id
+    template = get_template_by_id(template_id)
+    
+    if not template:
+        st.error("テンプレートが見つかりません")
+        st.session_state.editing_template_id = None
+        return
+    
+    # モーダル風表示
+    st.markdown("---")
+    st.markdown(f"## 📝 テンプレート詳細: {template['display_name']}")
+    
+    col_close, _ = st.columns([1, 5])
+    with col_close:
+        if st.button("❌ 閉じる"):
+            st.session_state.editing_template_id = None
+            st.rerun()
+    
+    tab1, tab2, tab3 = st.tabs(["👁️ プレビュー", "✏️ 編集", "📋 JSON"])
+    
+    # プレビュータブ
+    with tab1:
+        st.markdown("### プレビュー")
+        html_preview = generate_template_preview(template)
+        st.components.v1.html(html_preview, height=500, scrolling=True)
+    
+    # 編集タブ
+    with tab2:
+        st.markdown("### コンテンツ編集")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            new_title = st.text_input("タイトル", value=template['content'].get('title', ''), key="edit_title")
+            new_subtitle = st.text_area("サブタイトル", value=template['content'].get('subtitle', ''), height=80, key="edit_subtitle")
+            new_cta = st.text_input("CTAラベル", value=template['content'].get('cta_label', ''), key="edit_cta")
+        
         with col2:
-            if st.button("🗑️ 削除", key=f"delete_{template['template_id']}"):
-                delete_template(template['template_id'])
-                st.success("削除しました！")
-                st.rerun()
+            new_alignment = st.selectbox("配置", ["left", "center", "right"], 
+                                        index=["left", "center", "right"].index(template['layout'].get('alignment', 'center')),
+                                        key="edit_align")
+            new_bg_color = st.color_picker("背景色", value=template['layout'].get('background_color', '#FFFFFF'), key="edit_bg")
+        
+        if st.button("💾 更新を保存", type="primary"):
+            updates = {
+                "content": {
+                    **template['content'],
+                    "title": new_title,
+                    "subtitle": new_subtitle,
+                    "cta_label": new_cta
+                },
+                "layout": {
+                    **template['layout'],
+                    "alignment": new_alignment,
+                    "background_color": new_bg_color
+                }
+            }
+            update_template(template_id, updates)
+            st.success("✅ 更新しました！")
+            st.rerun()
+    
+    # JSONタブ
+    with tab3:
+        st.markdown("### JSON表示")
+        st.json(template)
+        
+        st.download_button(
+            label="💾 JSONをダウンロード",
+            data=json.dumps(template, ensure_ascii=False, indent=2),
+            file_name=f"template_{template['template_id']}.json",
+            mime="application/json"
+        )
 
 def show_data_management():
     """データ管理画面"""
