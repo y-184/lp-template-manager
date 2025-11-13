@@ -22,21 +22,82 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ===== セッションステート初期化 =====
+
+def init_session_state():
+    """セッションステートを初期化"""
+    if "templates" not in st.session_state:
+        # 初期データ読み込み
+        template_file = Path("data/templates.json")
+        if template_file.exists():
+            with open(template_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                st.session_state.templates = data["templates"]
+        else:
+            # デフォルトサンプル
+            st.session_state.templates = [
+                {
+                    "template_id": "sample_header_001",
+                    "display_name": "BtoB SaaS向けクリーンヘッダー",
+                    "section_type": "header",
+                    "status": "approved",
+                    "metadata": {
+                        "source_url": "https://example.com",
+                        "description": "シンプルで迷わないヘッダー構成。BtoB向け。",
+                        "screenshot_url": "",
+                        "tags": ["BtoB", "SaaS", "シンプル"],
+                        "created_by": "ichihashi",
+                        "created_at": "2025-01-13",
+                        "updated_at": "2025-01-13",
+                        "review_comment": ""
+                    },
+                    "layout": {
+                        "alignment": "center",
+                        "background_color": "#F8FAFC",
+                        "image_url": ""
+                    },
+                    "content": {
+                        "title": "革新的なマーケティングオートメーション",
+                        "subtitle": "リード獲得から受注まで、業務効率を3倍に",
+                        "bullets": [],
+                        "cta_label": "無料で試してみる",
+                        "price_table": [],
+                        "form_fields": []
+                    },
+                    "notes": "サンプルテンプレート"
+                }
+            ]
+
+# 初期化実行
+init_session_state()
+
 # ===== データ管理関数 =====
 
-def load_templates():
-    """テンプレートデータを読み込む"""
-    template_file = Path("data/templates.json")
-    if template_file.exists():
-        with open(template_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {"templates": []}
+def get_templates():
+    """テンプレートデータを取得"""
+    return st.session_state.templates
 
-def save_templates(data):
-    """テンプレートデータを保存する"""
-    template_file = Path("data/templates.json")
-    with open(template_file, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+def add_template(template):
+    """テンプレートを追加"""
+    st.session_state.templates.append(template)
+
+def update_template(template_id, updates):
+    """テンプレートを更新"""
+    for i, template in enumerate(st.session_state.templates):
+        if template["template_id"] == template_id:
+            st.session_state.templates[i].update(updates)
+            break
+
+def delete_template(template_id):
+    """テンプレートを削除"""
+    st.session_state.templates = [
+        t for t in st.session_state.templates 
+        if t["template_id"] != template_id
+    ]
+
+def export_templates_json():
+    """JSON形式でエクスポート"""
+    return json.dumps({"templates": st.session_state.templates}, ensure_ascii=False, indent=2)
 
 # ===== メインUI =====
 
@@ -54,7 +115,7 @@ def main():
         st.markdown("### 🎯 メニュー")
         menu = st.radio(
             "モードを選択",
-            ["🏠 ホーム", "📝 テンプレート登録", "🎨 LP作成", "📚 テンプレート一覧"],
+            ["🏠 ホーム", "📝 テンプレート登録", "🎨 LP作成", "📚 テンプレート一覧", "💾 データ管理"],
             label_visibility="collapsed"
         )
         
@@ -62,16 +123,20 @@ def main():
         st.markdown("### 📊 統計")
         
         # テンプレート統計
-        data = load_templates()
-        total = len(data["templates"])
-        approved = len([t for t in data["templates"] if t["status"] == "approved"])
-        draft = len([t for t in data["templates"] if t["status"] == "draft"])
+        templates = get_templates()
+        total = len(templates)
+        approved = len([t for t in templates if t["status"] == "approved"])
+        draft = len([t for t in templates if t["status"] == "draft"])
         
         col1, col2 = st.columns(2)
         with col1:
             st.metric("総テンプレ", total)
         with col2:
             st.metric("承認済み", approved)
+        
+        # データ永続化の注意
+        st.markdown("---")
+        st.info("💡 データはセッション内のみ保持されます。「データ管理」からエクスポート可能です。")
     
     # メイン画面
     if menu == "🏠 ホーム":
@@ -82,6 +147,8 @@ def main():
         show_page_builder()
     elif menu == "📚 テンプレート一覧":
         show_template_list()
+    elif menu == "💾 データ管理":
+        show_data_management()
 
 # ===== 各画面 =====
 
@@ -104,18 +171,21 @@ def show_home():
     3. **📚 テンプレート一覧**  
        登録したテンプレートを確認・管理
     
+    4. **💾 データ管理**  
+       テンプレートデータのエクスポート・インポート
+    
     ### 🚀 さっそく始めましょう！
     
     左のメニューから「テンプレート登録」を選んで、最初のテンプレートを作成してみてください。
     """)
     
     # サンプルプレビュー
-    data = load_templates()
-    if data["templates"]:
+    templates = get_templates()
+    if templates:
         st.markdown("---")
         st.markdown("### 📋 登録済みテンプレート例")
         
-        template = data["templates"][0]
+        template = templates[0]
         
         st.markdown(f"""
         <div class="bg-white rounded-lg shadow-md p-6 border border-gray-200">
@@ -166,45 +236,46 @@ def show_template_registration():
         tags = [tag.strip() for tag in tags_input.split(",")] if tags_input else []
         
         if st.button("💾 下書き保存", type="primary", use_container_width=True):
-            # 新規テンプレート作成
-            new_template = {
-                "template_id": str(uuid.uuid4()),
-                "display_name": display_name,
-                "section_type": section_type,
-                "status": "draft",
-                "metadata": {
-                    "source_url": source_url,
-                    "description": description,
-                    "screenshot_url": screenshot_url,
-                    "tags": tags,
-                    "created_by": "user",
-                    "created_at": datetime.now().strftime("%Y-%m-%d"),
-                    "updated_at": datetime.now().strftime("%Y-%m-%d"),
-                    "review_comment": ""
-                },
-                "layout": {
-                    "alignment": "center",
-                    "background_color": "#FFFFFF",
-                    "image_url": ""
-                },
-                "content": {
-                    "title": "",
-                    "subtitle": "",
-                    "bullets": [],
-                    "cta_label": "",
-                    "price_table": [],
-                    "form_fields": []
-                },
-                "notes": ""
-            }
-            
-            # データ保存
-            data = load_templates()
-            data["templates"].append(new_template)
-            save_templates(data)
-            
-            st.success("✅ 下書きとして保存しました！")
-            st.rerun()
+            if not display_name:
+                st.error("⚠️ テンプレート名を入力してください")
+            else:
+                # 新規テンプレート作成
+                new_template = {
+                    "template_id": str(uuid.uuid4()),
+                    "display_name": display_name,
+                    "section_type": section_type,
+                    "status": "draft",
+                    "metadata": {
+                        "source_url": source_url,
+                        "description": description,
+                        "screenshot_url": screenshot_url,
+                        "tags": tags,
+                        "created_by": "user",
+                        "created_at": datetime.now().strftime("%Y-%m-%d"),
+                        "updated_at": datetime.now().strftime("%Y-%m-%d"),
+                        "review_comment": ""
+                    },
+                    "layout": {
+                        "alignment": "center",
+                        "background_color": "#FFFFFF",
+                        "image_url": ""
+                    },
+                    "content": {
+                        "title": "",
+                        "subtitle": "",
+                        "bullets": [],
+                        "cta_label": "",
+                        "price_table": [],
+                        "form_fields": []
+                    },
+                    "notes": ""
+                }
+                
+                # データ保存
+                add_template(new_template)
+                
+                st.success("✅ 下書きとして保存しました！")
+                st.balloons()
     
     with col2:
         st.markdown("### Step 2: ChatGPT用プロンプト生成")
@@ -248,8 +319,12 @@ def show_template_registration():
             
             st.code(prompt, language="text")
             
-            if st.button("📋 プロンプトをコピー"):
-                st.toast("プロンプトをクリップボードにコピーしました！")
+            st.download_button(
+                label="📋 プロンプトをダウンロード",
+                data=prompt,
+                file_name="chatgpt_prompt.txt",
+                mime="text/plain"
+            )
         else:
             st.warning("⚠️ 基本情報を入力するとプロンプトが生成されます")
 
@@ -259,8 +334,8 @@ def show_page_builder():
     st.markdown("承認済みテンプレートを組み合わせてLP全体を作成します。")
     
     # 承認済みテンプレートのみ取得
-    data = load_templates()
-    approved_templates = [t for t in data["templates"] if t["status"] == "approved"]
+    templates = get_templates()
+    approved_templates = [t for t in templates if t["status"] == "approved"]
     
     if not approved_templates:
         st.warning("⚠️ 承認済みテンプレートがありません。先に「テンプレート登録」から作成してください。")
@@ -358,16 +433,21 @@ def show_page_builder():
             st.markdown("---")
             st.markdown("#### コード出力")
             
-            if st.button("📥 HTML/CSSをコピー"):
+            with st.expander("📥 HTML/CSSコードを表示"):
                 st.code(html_preview, language="html")
-                st.toast("コードをコピーできます！")
+                
+                st.download_button(
+                    label="💾 HTMLをダウンロード",
+                    data=html_preview,
+                    file_name="lp_preview.html",
+                    mime="text/html"
+                )
 
 def show_template_list():
     """テンプレート一覧画面"""
     st.markdown("## 📚 テンプレート一覧")
     
-    data = load_templates()
-    templates = data["templates"]
+    templates = get_templates()
     
     if not templates:
         st.info("まだテンプレートがありません。「テンプレート登録」から作成してください。")
@@ -424,16 +504,61 @@ def show_template_list():
         with col1:
             if template["status"] == "draft":
                 if st.button("✅ 承認", key=f"approve_{template['template_id']}"):
-                    template["status"] = "approved"
-                    save_templates(data)
+                    update_template(template['template_id'], {"status": "approved"})
                     st.success("承認しました！")
                     st.rerun()
         with col2:
             if st.button("🗑️ 削除", key=f"delete_{template['template_id']}"):
-                data["templates"].remove(template)
-                save_templates(data)
+                delete_template(template['template_id'])
                 st.success("削除しました！")
                 st.rerun()
+
+def show_data_management():
+    """データ管理画面"""
+    st.markdown("## 💾 データ管理")
+    st.markdown("テンプレートデータのエクスポート・インポートができます。")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 📤 エクスポート")
+        st.info("現在のテンプレートデータをJSON形式でダウンロードできます。")
+        
+        json_data = export_templates_json()
+        
+        st.download_button(
+            label="💾 JSONをダウンロード",
+            data=json_data,
+            file_name=f"templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+        
+        with st.expander("📋 JSONプレビュー"):
+            st.code(json_data, language="json")
+    
+    with col2:
+        st.markdown("### 📥 インポート")
+        st.info("以前エクスポートしたJSONファイルを読み込めます。")
+        
+        uploaded_file = st.file_uploader("JSONファイルを選択", type=["json"])
+        
+        if uploaded_file is not None:
+            try:
+                imported_data = json.load(uploaded_file)
+                
+                if "templates" in imported_data:
+                    st.success(f"✅ {len(imported_data['templates'])}件のテンプレートを読み込みました")
+                    
+                    if st.button("📥 インポート実行", type="primary", use_container_width=True):
+                        st.session_state.templates = imported_data["templates"]
+                        st.success("インポートが完了しました！")
+                        st.balloons()
+                        st.rerun()
+                else:
+                    st.error("⚠️ 正しいJSON形式ではありません")
+            except Exception as e:
+                st.error(f"⚠️ エラー: {str(e)}")
 
 # ===== エントリーポイント =====
 
