@@ -40,9 +40,14 @@ st.markdown("""
         z-index: 0;
     }
     
-    /* グローバルテキストカラー */
-    .stApp, .stApp * {
-        color: #e0e7ff !important;
+    /* グローバルテキストカラー（安全版） */
+    .stApp {
+        color: #e0e7ff;
+    }
+    
+    /* カスタムクラスのみスタイリング */
+    .help-box, .prompt-box, .backup-alert, .cyber-button {
+        color: #e0e7ff;
     }
     
     /* タブスタイル改善 */
