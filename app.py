@@ -234,171 +234,288 @@ def generate_section_preview(template):
 
 def generate_hero_preview(template):
     """
-    freee風の詳細JSON構造に完全対応したヒーローセクションプレビュー生成
+    freee風の完璧な再現を目指したヒーローセクションプレビュー生成
     
-    対応形式：
-    1. 詳細形式: content, layout, background キーを持つ構造
-    2. シンプル形式: title, layout, background などのフラット構造
-    3. レガシー形式: title, subtitle, description のみ
+    対応項目：
+    - タイトルの詳細スタイリング（weight, letter-spacing, line-height）
+    - ボタン上のラベル表示
+    - Trust Badgesの完全実装（アイコン、強調、影）
+    - 右側ビジュアルの重なり効果
+    - 装飾要素（小鳥イラスト等）
     """
     
     # === 形式判定 ===
     has_content_key = 'content' in template
-    has_layout_key = 'layout' in template and isinstance(template.get('layout'), (dict, str))
+    has_layout_key = 'layout' in template
     has_background_key = 'background' in template
     has_simple_keys = 'title' in template or 'title_size' in template
     
-    # 新形式（詳細 or シンプル）の判定
     is_advanced_format = has_content_key or (has_simple_keys and (has_layout_key or has_background_key))
     
     if is_advanced_format:
-        # === 新形式: 詳細 or シンプル ===
+        # === シンプル形式対応（拡張版） ===
         
-        # 詳細形式の場合
-        if has_content_key:
-            content = template.get('content', {})
-            main_title_data = content.get('main_title', {})
-            title_text = main_title_data.get('example', 'タイトル')
-            title_font_size = main_title_data.get('font_size', '56px')
-            title_color = main_title_data.get('color', '#333333')
-            title_line_height = main_title_data.get('line_height', '1.4')
-            
-            # 変数置換
-            variables = template.get('variables', {})
-            for key, value in variables.items():
-                title_text = title_text.replace(f'{{{{{key}}}}}', value)
-            
-            subtitle_data = content.get('subtitle', {})
-            subtitle_text = subtitle_data.get('example', '')
-            subtitle_font_size = subtitle_data.get('font_size', '18px')
-            subtitle_color = subtitle_data.get('color', '#666666')
-            subtitle_line_height = subtitle_data.get('line_height', '1.8')
-            subtitle_max_width = subtitle_data.get('max_width', '600px')
-            
-            for key, value in variables.items():
-                subtitle_text = subtitle_text.replace(f'{{{{{key}}}}}', value)
-            
-            # CTA生成
-            cta_section = content.get('cta_section', {})
-            buttons = cta_section.get('buttons', [])
-            cta_gap = cta_section.get('gap', '16px')
-            
-            cta_html = ""
-            if buttons:
-                btn_items = []
-                for btn in buttons:
-                    label_above = btn.get('label_above', {})
-                    label_html = ""
-                    if label_above:
-                        label_html = f"<div style='font-size: {label_above.get('font_size', '12px')}; color: {label_above.get('color', '#666')}; margin-bottom: 8px;'>{label_above.get('text', '')}</div>"
-                    
-                    btn_items.append(f"""
-                    <div style='display: flex; flex-direction: column; align-items: flex-start;'>
-                        {label_html}
-                        <button style='width: {btn.get('width', '240px')}; height: {btn.get('height', '64px')}; 
-                                        font-size: {btn.get('font_size', '18px')}; font-weight: bold; 
-                                        background: {btn.get('background', '#0066FF')}; color: {btn.get('color', '#FFF')}; 
-                                        border: {btn.get('border', 'none')}; border-radius: {btn.get('border_radius', '32px')}; 
-                                        cursor: pointer;'>{btn.get('text', 'ボタン')}</button>
+        # タイトル情報（詳細）
+        title_text = template.get('title', 'タイトル')
+        title_size = template.get('title_size', '56px')
+        title_color = template.get('title_color', '#333333')
+        title_weight = template.get('title_weight', '800')
+        title_line_height = template.get('title_line_height', '1.4')
+        title_letter_spacing = template.get('title_letter_spacing', 'normal')
+        
+        # サブタイトル情報
+        subtitle_text = template.get('subtitle', '')
+        subtitle_size = template.get('subtitle_size', '16px')
+        subtitle_color = template.get('subtitle_color', '#666666')
+        subtitle_weight = template.get('subtitle_weight', '400')
+        subtitle_line_height = template.get('subtitle_line_height', '1.75')
+        subtitle_max_width = template.get('subtitle_max_width', '540px')
+        
+        # CTA情報（拡張版：label_above対応）
+        cta_section = template.get('cta_section', {})
+        cta_buttons = cta_section.get('buttons', [])
+        cta_gap = cta_section.get('gap', '16px')
+        
+        cta_html = ""
+        if cta_buttons:
+            btn_items = []
+            for btn in cta_buttons:
+                # ボタン上のラベル
+                label_above = btn.get('label_above', {})
+                label_html = ""
+                if label_above and label_above.get('text'):
+                    label_text = label_above.get('text', '')
+                    label_size = label_above.get('font_size', '12px')
+                    label_color = label_above.get('color', '#666666')
+                    label_weight = label_above.get('weight', '400')
+                    label_html = f"""
+                    <div style='font-size: {label_size}; color: {label_color}; font-weight: {label_weight}; 
+                                margin-bottom: 8px; text-align: left;'>
+                        {label_text}
                     </div>
-                    """)
-                cta_html = f"<div style='display: flex; gap: {cta_gap}; margin-bottom: 40px; flex-wrap: wrap;'>{''.join(btn_items)}</div>"
+                    """
+                
+                # ボタン本体
+                btn_text = btn.get('text', 'ボタン')
+                btn_width = btn.get('width', '240px')
+                btn_height = btn.get('height', '64px')
+                btn_font_size = btn.get('font_size', '18px')
+                btn_font_weight = btn.get('font_weight', 'bold')
+                btn_bg = btn.get('background', '#0066FF')
+                btn_color = btn.get('color', '#FFFFFF')
+                btn_border = btn.get('border', 'none')
+                btn_border_radius = btn.get('border_radius', '32px')
+                btn_shadow = btn.get('shadow', '0 4px 16px rgba(0, 102, 255, 0.3)')
+                
+                btn_items.append(f"""
+                <div style='display: flex; flex-direction: column; align-items: flex-start;'>
+                    {label_html}
+                    <button style='width: {btn_width}; height: {btn_height}; 
+                                    font-size: {btn_font_size}; font-weight: {btn_font_weight}; 
+                                    background: {btn_bg}; color: {btn_color}; 
+                                    border: {btn_border}; border-radius: {btn_border_radius}; 
+                                    cursor: pointer; box-shadow: {btn_shadow};
+                                    transition: all 0.3s ease;'>
+                        {btn_text}
+                    </button>
+                </div>
+                """)
             
-            # Trust Badges生成
-            trust_badges_data = content.get('trust_badges', {})
-            trust_items = trust_badges_data.get('items', [])
-            trust_html = ""
-            if trust_items:
-                badge_list = []
-                for item in trust_items:
-                    text_display = item.get('text_example', '').replace('\n', '<br>')
-                    badge_list.append(f"""
-                    <div style='width: {item.get('width', '180px')}; height: {item.get('height', '120px')}; 
-                                background: {item.get('background', '#F8F9FA')}; border-radius: {item.get('border_radius', '12px')}; 
-                                padding: {item.get('padding', '16px')}; display: flex; flex-direction: column; 
-                                align-items: center; justify-content: center; text-align: center; 
-                                font-size: {item.get('font_size', '14px')}; font-weight: bold;'>{text_display}</div>
-                    """)
-                trust_html = f"<div style='display: flex; gap: {trust_badges_data.get('gap', '32px')}; flex-wrap: wrap;'>{''.join(badge_list)}</div>"
-            
-            layout_obj = template.get('layout', {})
-            layout_structure = layout_obj.get('structure', 'center')
-            left_column = layout_obj.get('left_column', {})
-            left_width = left_column.get('width', '45%')
-            left_padding = left_column.get('padding', '80px 60px')
-            left_alignment = left_column.get('alignment', 'left')
-            
-            right_column = layout_obj.get('right_column', {})
-            right_width = right_column.get('width', '55%')
-            
-            background_obj = template.get('background', {})
-            bg_colors = background_obj.get('colors', [
-                {"position": "0%", "color": "#E3F2FD"},
-                {"position": "50%", "color": "#F5F5FF"},
-                {"position": "100%", "color": "#FFFFFF"}
-            ])
-            gradient_stops = ', '.join([f"{c['color']} {c['position']}" for c in bg_colors])
-            bg_gradient = f"linear-gradient(135deg, {gradient_stops})"
-            
+            cta_html = f"""
+            <div style='display: flex; gap: {cta_gap}; margin-bottom: 56px; flex-wrap: wrap;'>
+                {''.join(btn_items)}
+            </div>
+            """
         else:
-            # シンプル形式
-            title_text = template.get('title', 'タイトル')
-            title_font_size = template.get('title_size', '56px')
-            title_color = template.get('title_color', '#333333')
-            title_line_height = '1.4'
-            
-            subtitle_text = template.get('subtitle', '')
-            subtitle_font_size = template.get('subtitle_size', '18px')
-            subtitle_color = template.get('subtitle_color', '#666666')
-            subtitle_line_height = '1.8'
-            subtitle_max_width = '600px'
-            
-            # CTA生成（シンプル形式）
+            # フォールバック：シンプル形式
             cta_primary_text = template.get('cta_primary_text', '無料で始める')
             cta_primary_bg = template.get('cta_primary_bg', '#0066FF')
             cta_secondary_text = template.get('cta_secondary_text', '資料請求')
             
             cta_html = f"""
-            <div style='display: flex; gap: 16px; margin-bottom: 40px; flex-wrap: wrap;'>
+            <div style='display: flex; gap: 16px; margin-bottom: 56px; flex-wrap: wrap;'>
                 <button style='width: 240px; height: 64px; font-size: 18px; font-weight: bold; 
                                 background: {cta_primary_bg}; color: #FFFFFF; border: none; 
-                                border-radius: 32px; cursor: pointer;'>{cta_primary_text}</button>
+                                border-radius: 32px; cursor: pointer; 
+                                box-shadow: 0 4px 16px rgba(0, 102, 255, 0.3);'>
+                    {cta_primary_text}
+                </button>
                 <button style='width: 240px; height: 64px; font-size: 18px; font-weight: bold; 
-                                background: transparent; color: {cta_primary_bg}; border: 2px solid {cta_primary_bg}; 
-                                border-radius: 32px; cursor: pointer;'>{cta_secondary_text}</button>
+                                background: transparent; color: {cta_primary_bg}; 
+                                border: 2px solid {cta_primary_bg}; border-radius: 32px; cursor: pointer;'>
+                    {cta_secondary_text}
+                </button>
             </div>
             """
+        
+        # Trust Badges（完全実装版）
+        trust_badges = template.get('trust_badges', {})
+        trust_items = trust_badges.get('items', [])
+        trust_gap = trust_badges.get('gap', '32px')
+        
+        trust_html = ""
+        if trust_items:
+            badge_list = []
+            for item in trust_items:
+                icon = item.get('icon', '')
+                text_main = item.get('text_main', '')
+                text_highlight = item.get('text_highlight', '')
+                text_value = item.get('text_value', '')
+                text_unit = item.get('text_unit', '')
+                
+                font_size = item.get('font_size', '13px')
+                highlight_size = item.get('highlight_size', '16px')
+                value_size = item.get('value_size', '28px')
+                value_color = item.get('value_color', '#0066FF')
+                
+                width = item.get('width', '200px')
+                height = item.get('height', '140px')
+                bg = item.get('background', '#ffffff')
+                border = item.get('border', '1px solid #e8e8e8')
+                border_radius = item.get('border_radius', '12px')
+                padding = item.get('padding', '20px 16px')
+                shadow = item.get('shadow', '0 2px 8px rgba(0, 0, 0, 0.06)')
+                
+                # バッジHTML構築
+                badge_content = f"""
+                <div style='width: {width}; height: {height}; background: {bg}; 
+                            border: {border}; border-radius: {border_radius}; padding: {padding};
+                            box-shadow: {shadow}; display: flex; flex-direction: column; 
+                            align-items: center; justify-content: center; text-align: center;'>
+                    <div style='font-size: 32px; margin-bottom: 8px;'>{icon}</div>
+                    <div style='font-size: {font_size}; color: #666; margin-bottom: 4px;'>{text_main}</div>
+                    <div style='font-size: {highlight_size}; color: #333; font-weight: 600; margin-bottom: 8px;'>{text_highlight}</div>
+                    <div style='font-size: {value_size}; color: {value_color}; font-weight: 900;'>
+                        {text_value}<span style='font-size: {font_size}; margin-left: 2px;'>{text_unit}</span>
+                    </div>
+                </div>
+                """
+                badge_list.append(badge_content)
             
-            # Trust Badges（シンプル形式）
+            trust_html = f"""
+            <div style='display: flex; gap: {trust_gap}; flex-wrap: wrap;'>
+                {''.join(badge_list)}
+            </div>
+            """
+        else:
+            # フォールバック：シンプル形式
             trust_badge_1 = template.get('trust_badge_1', '')
             trust_badge_2 = template.get('trust_badge_2', '')
-            trust_html = ""
             if trust_badge_1 or trust_badge_2:
                 badges = []
                 if trust_badge_1:
-                    badges.append(f"<div style='width: 180px; height: 120px; background: #F8F9FA; border-radius: 12px; padding: 16px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 14px; font-weight: bold;'>{trust_badge_1}</div>")
+                    badges.append(f"""
+                    <div style='width: 200px; height: 120px; background: #ffffff; border: 1px solid #e8e8e8;
+                                border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+                                display: flex; align-items: center; justify-content: center; text-align: center; 
+                                font-size: 14px; font-weight: bold; color: #333;'>
+                        {trust_badge_1}
+                    </div>
+                    """)
                 if trust_badge_2:
-                    badges.append(f"<div style='width: 180px; height: 120px; background: #F8F9FA; border-radius: 12px; padding: 16px; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 14px; font-weight: bold;'>{trust_badge_2}</div>")
+                    badges.append(f"""
+                    <div style='width: 200px; height: 120px; background: #ffffff; border: 1px solid #e8e8e8;
+                                border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+                                display: flex; align-items: center; justify-content: center; text-align: center; 
+                                font-size: 14px; font-weight: bold; color: #333;'>
+                        {trust_badge_2}
+                    </div>
+                    """)
                 trust_html = f"<div style='display: flex; gap: 32px; flex-wrap: wrap;'>{''.join(badges)}</div>"
+        
+        # 右側ビジュアル（重なり効果）
+        right_visual = template.get('right_visual', {})
+        visual_images = right_visual.get('images', [])
+        
+        right_visual_html = ""
+        if visual_images and len(visual_images) >= 2:
+            # 2つの画像を重ねて表示
+            img1 = visual_images[0]
+            img2 = visual_images[1]
             
-            # レイアウト判定
-            layout_value = template.get('layout', '')
-            if layout_value == 'left_right_split' or layout_value == 'two_column_split':
-                layout_structure = 'two_column_split'
-            else:
-                layout_structure = 'center'
+            img1_width = img1.get('width', '520px')
+            img1_height = img1.get('height', '360px')
+            img1_rotation = img1.get('rotation', '-3deg')
+            img1_z = img1.get('z_index', 2)
+            img1_shadow = img1.get('shadow', '0 20px 60px rgba(0, 0, 0, 0.15)')
+            img1_bg = img1.get('placeholder_color', '#f5f7fa')
+            img1_border = img1.get('border', '1px solid #e0e0e0')
+            img1_radius = img1.get('border_radius', '12px')
+            img1_desc = img1.get('description', 'プロダクト画面1')
             
-            left_width = '45%'
-            left_padding = '80px 60px'
-            left_alignment = 'left'
-            right_width = '55%'
+            img2_width = img2.get('width', '480px')
+            img2_height = img2.get('height', '340px')
+            img2_rotation = img2.get('rotation', '2deg')
+            img2_z = img2.get('z_index', 1)
+            img2_shadow = img2.get('shadow', '0 15px 45px rgba(0, 0, 0, 0.12)')
+            img2_bg = img2.get('placeholder_color', '#ffffff')
+            img2_border = img2.get('border', '1px solid #e0e0e0')
+            img2_radius = img2.get('border_radius', '12px')
+            img2_desc = img2.get('description', 'プロダクト画面2')
             
-            # 背景
-            bg_value = template.get('background', '')
-            if bg_value and 'linear-gradient' in bg_value:
-                bg_gradient = bg_value
-            else:
-                bg_gradient = "linear-gradient(135deg, #E3F2FD 0%, #F5F5FF 50%, #FFFFFF 100%)"
+            right_visual_html = f"""
+            <div style='position: relative; width: 650px; height: 450px;'>
+                <!-- 背面の画像 -->
+                <div style='position: absolute; top: 40px; right: 0; width: {img2_width}; height: {img2_height};
+                            background: {img2_bg}; border: {img2_border}; border-radius: {img2_radius};
+                            transform: rotate({img2_rotation}); z-index: {img2_z}; box-shadow: {img2_shadow};
+                            display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;'>
+                    {img2_desc}
+                </div>
+                <!-- 前面の画像 -->
+                <div style='position: absolute; top: 0; left: 0; width: {img1_width}; height: {img1_height};
+                            background: {img1_bg}; border: {img1_border}; border-radius: {img1_radius};
+                            transform: rotate({img1_rotation}); z-index: {img1_z}; box-shadow: {img1_shadow};
+                            display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;'>
+                    {img1_desc}
+                </div>
+            </div>
+            """
+        else:
+            # フォールバック：シンプルな枠
+            right_visual_html = """
+            <div style='width: 600px; height: 400px; background: rgba(255, 255, 255, 0.5); 
+                        border-radius: 12px; display: flex; align-items: center; justify-content: center; 
+                        color: #999; font-size: 16px; border: 2px dashed #ccc;'>
+                プロダクト画像エリア
+            </div>
+            """
+        
+        # 装飾要素（小鳥イラスト等）
+        decorative_elements = template.get('decorative_elements', [])
+        decorative_html = ""
+        for elem in decorative_elements:
+            if elem.get('type') == 'illustration':
+                emoji = elem.get('emoji', '🐦')
+                size = elem.get('size', '64px')
+                position = elem.get('position', 'title_top_right')
+                
+                # タイトル右上に配置
+                decorative_html = f"""
+                <div style='position: absolute; top: -20px; right: -40px; font-size: {size}; opacity: 0.9;'>
+                    {emoji}
+                </div>
+                """
+        
+        # レイアウト判定
+        layout_value = template.get('layout', '')
+        if layout_value in ['left_right_split', 'two_column_split']:
+            layout_structure = 'two_column_split'
+        else:
+            layout_structure = 'center'
+        
+        # 背景
+        bg_value = template.get('background', '')
+        if bg_value and 'linear-gradient' in bg_value:
+            bg_gradient = bg_value
+        else:
+            bg_gradient = "linear-gradient(135deg, #E8F4FD 0%, #F0F0FA 35%, #FAFBFF 70%, #FFFFFF 100%)"
+        
+        # スペーシング
+        spacing = template.get('spacing', {})
+        left_width = spacing.get('left_column_width', '48%')
+        right_width = spacing.get('right_column_width', '52%')
+        container_padding = spacing.get('container_padding', '100px 80px')
         
         # HTML生成（左右分割レイアウト）
         if layout_structure == 'two_column_split':
@@ -410,36 +527,69 @@ def generate_hero_preview(template):
                 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
                 <style>
                     * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-                    body {{ font-family: 'Inter', sans-serif; background: {bg_gradient}; min-height: 100vh; }}
-                    .hero-container {{ display: flex; min-height: 100vh; align-items: center; }}
-                    .left-column {{ width: {left_width}; padding: {left_padding}; text-align: {left_alignment}; }}
-                    .right-column {{ width: {right_width}; display: flex; align-items: center; justify-content: center; padding: 40px; }}
-                    .main-title {{ font-size: {title_font_size}; font-weight: bold; color: {title_color}; 
-                                   line-height: {title_line_height}; margin-bottom: 32px; white-space: pre-line; }}
-                    .subtitle {{ font-size: {subtitle_font_size}; color: {subtitle_color}; line-height: {subtitle_line_height}; 
-                                 max-width: {subtitle_max_width}; margin-bottom: 48px; }}
-                    .right-visual {{ width: 600px; height: 400px; background: rgba(255, 255, 255, 0.5); 
-                                     border-radius: 12px; display: flex; align-items: center; justify-content: center; 
-                                     color: #999; font-size: 16px; border: 2px dashed #ccc; }}
+                    body {{ 
+                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+                        background: {bg_gradient}; 
+                        min-height: 100vh;
+                        -webkit-font-smoothing: antialiased;
+                    }}
+                    .hero-container {{ 
+                        display: flex; 
+                        min-height: 100vh; 
+                        align-items: center; 
+                        padding: {container_padding};
+                    }}
+                    .left-column {{ 
+                        width: {left_width}; 
+                        padding-right: 60px;
+                        position: relative;
+                    }}
+                    .right-column {{ 
+                        width: {right_width}; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center;
+                    }}
+                    .main-title {{ 
+                        font-size: {title_size}; 
+                        font-weight: {title_weight}; 
+                        color: {title_color}; 
+                        line-height: {title_line_height}; 
+                        letter-spacing: {title_letter_spacing};
+                        margin-bottom: 28px; 
+                        white-space: pre-line;
+                        position: relative;
+                    }}
+                    .subtitle {{ 
+                        font-size: {subtitle_size}; 
+                        font-weight: {subtitle_weight};
+                        color: {subtitle_color}; 
+                        line-height: {subtitle_line_height}; 
+                        max-width: {subtitle_max_width}; 
+                        margin-bottom: 48px;
+                    }}
                 </style>
             </head>
             <body>
                 <div class="hero-container">
                     <div class="left-column">
-                        <h1 class="main-title">{title_text}</h1>
+                        <h1 class="main-title">
+                            {title_text}
+                            {decorative_html}
+                        </h1>
                         <div class="subtitle">{subtitle_text}</div>
                         {cta_html}
                         {trust_html}
                     </div>
                     <div class="right-column">
-                        <div class="right-visual">プロダクト画像エリア</div>
+                        {right_visual_html}
                     </div>
                 </div>
             </body>
             </html>
             """
     
-    # === レガシー形式: シンプル構造（後方互換性） ===
+    # === レガシー形式（後方互換性） ===
     title = template.get('title', 'タイトル')
     subtitle = template.get('subtitle', 'サブタイトル')
     description = template.get('description', '説明文')
@@ -449,11 +599,10 @@ def generate_hero_preview(template):
     
     trust_html = ""
     if trust_elements:
-        badges = [f"<span style='background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 8px 16px; border-radius: 20px; font-size: 14px; border: 1px solid rgba(59, 130, 246, 0.3);'>{elem}</span>" 
+        badges = [f"<span style='background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 8px 16px; border-radius: 20px; font-size: 14px;'>{elem}</span>" 
                  for elem in trust_elements]
         trust_html = f"<div style='display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 24px;'>{''.join(badges)}</div>"
     
-    # レガシー形式のデフォルト背景（グレー）
     return f"""
     <!DOCTYPE html>
     <html>
@@ -513,7 +662,6 @@ def generate_hero_preview(template):
                 font-size: 1.1rem;
                 border: none;
                 cursor: pointer;
-                box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
             }}
             .cta-secondary {{
                 background: transparent;
