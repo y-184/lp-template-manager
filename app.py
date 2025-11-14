@@ -66,6 +66,33 @@ st.markdown("""
         margin-bottom: 12px;
         font-size: 18px;
     }
+    
+    /* 入力項目のラベルを黒く太く */
+    .stTextInput > label,
+    .stTextArea > label,
+    .stSelectbox > label {
+        color: #1a1a1a !important;
+        font-weight: 600 !important;
+        font-size: 16px !important;
+        margin-bottom: 8px !important;
+    }
+    
+    /* プレビューボタンを大きく */
+    .preview-button {
+        background: #3b82f6;
+        color: white;
+        padding: 12px 32px;
+        border-radius: 8px;
+        border: none;
+        font-weight: 600;
+        font-size: 16px;
+        cursor: pointer;
+        margin: 20px 0;
+    }
+    
+    .preview-button:hover {
+        background: #2563eb;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1294,11 +1321,18 @@ def show_template_registration_mode():
             st.markdown("---")
             st.markdown("### 👀 プレビュー")
             
-            try:
-                preview_html = generate_section_preview(st.session_state.temp_template)
-                st.components.v1.html(preview_html, height=600, scrolling=True)
-            except Exception as e:
-                st.error(f"プレビュー生成エラー: {str(e)}")
+            col_preview1, col_preview2 = st.columns([3, 1])
+            
+            with col_preview1:
+                try:
+                    preview_html = generate_section_preview(st.session_state.temp_template)
+                    st.components.v1.html(preview_html, height=600, scrolling=True)
+                except Exception as e:
+                    st.error(f"プレビュー生成エラー: {str(e)}")
+            
+            with col_preview2:
+                if st.button("🔍 大画面で見る", key="open_preview_modal", use_container_width=True):
+                    st.session_state.show_preview_modal = True
             
             st.markdown("### 📄 JSONデータ")
             st.json(st.session_state.temp_template)
@@ -1398,5 +1432,22 @@ def show_design_creation_mode():
     
     st.info("💡 登録済みテンプレートを選択して編集できます（開発中）")
 
+# ===== プレビューモーダル =====
+@st.dialog("🔍 プレビュー（大画面）", width="large")
+def show_preview_modal():
+    if 'temp_template' in st.session_state:
+        try:
+            preview_html = generate_section_preview(st.session_state.temp_template)
+            st.components.v1.html(preview_html, height=800, scrolling=True)
+        except Exception as e:
+            st.error(f"プレビュー生成エラー: {str(e)}")
+    else:
+        st.warning("プレビューするテンプレートがありません。")
+
 if __name__ == "__main__":
     main()
+    
+    # モーダル表示処理
+    if st.session_state.get('show_preview_modal', False):
+        show_preview_modal()
+        st.session_state.show_preview_modal = False
