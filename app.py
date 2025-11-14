@@ -1,1447 +1,694 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+LP Template Manager - HTML直接入力対応版
+ChatGPTが生成したHTML+CSSをそのまま貼り付けて使える
+"""
+
 import streamlit as st
 import json
 import re
-import html
 from datetime import datetime
-import uuid
+from typing import Dict, List, Optional
+import html
 
 # ページ設定
 st.set_page_config(
-    page_title="LP Template Manager - Cyberpunk Edition",
-    page_icon="🔮",
+    page_title="LP Template Manager - HTML Edition",
+    page_icon="🎨",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ===== シンプル＆確実スタイル =====
-
+# CSS：シンプルで安全なスタイル
 st.markdown("""
 <style>
-    /* 基本設定：白背景 + 黒文字 */
-    .stApp {
+    /* 基本スタイル */
+    .main {
         background-color: #ffffff;
-        color: #000000;
+        color: #1a1a1a;
     }
     
-    /* ヘルプボックス */
-    .help-box {
-        background-color: #f0f4ff;
-        border-left: 4px solid #3b82f6;
-        padding: 16px 20px;
-        border-radius: 8px;
-        margin: 16px 0;
-        color: #1e293b;
-    }
-    
-    .help-box strong {
-        color: #1e40af;
-    }
-    
-    /* プロンプトボックス */
-    .prompt-box {
-        background-color: #f9fafb;
-        border: 1px solid #d1d5db;
-        border-radius: 8px;
-        padding: 16px;
-        font-family: monospace;
-        font-size: 13px;
-        line-height: 1.6;
-        color: #111827;
-        max-height: 400px;
-        overflow-y: auto;
-    }
-    
-    /* バックアップアラート */
-    .backup-alert {
-        background-color: #ecfdf5;
-        border: 2px solid #10b981;
-        border-radius: 8px;
-        padding: 20px;
-        margin: 20px 0;
-        color: #065f46;
-    }
-    
-    .backup-alert h3 {
-        color: #047857;
-        margin-bottom: 12px;
-        font-size: 18px;
-    }
-    
-    /* 入力項目のラベルを黒く太く */
-    .stTextInput > label,
-    .stTextArea > label,
-    .stSelectbox > label {
-        color: #1a1a1a !important;
+    /* 入力項目のラベルを見やすく */
+    label, .stTextInput label, .stTextArea label, .stSelectbox label, .stRadio label {
+        color: #000000 !important;
         font-weight: 600 !important;
-        font-size: 16px !important;
-        margin-bottom: 8px !important;
+        font-size: 14px !important;
     }
     
-    /* プレビューボタンを大きく */
-    .preview-button {
-        background: #3b82f6;
+    /* タイトル */
+    h1, h2, h3 {
+        color: #1a1a1a;
+        font-weight: 700;
+    }
+    
+    /* ボタン */
+    .stButton>button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        padding: 12px 32px;
-        border-radius: 8px;
         border: none;
+        border-radius: 8px;
+        padding: 0.5rem 2rem;
         font-weight: 600;
-        font-size: 16px;
-        cursor: pointer;
-        margin: 20px 0;
+        transition: all 0.3s ease;
     }
     
-    .preview-button:hover {
-        background: #2563eb;
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    /* カード */
+    .template-card {
+        background: white;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+    }
+    
+    .template-card:hover {
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    /* 成功・警告メッセージ */
+    .stSuccess, .stWarning, .stInfo {
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    /* コードエディタエリア */
+    .stTextArea textarea {
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ===== ChatGPT連携プロンプトテンプレート =====
+# ===== セキュリティ関数 =====
+def sanitize_html_basic(text: str) -> str:
+    """基本的なHTMLエスケープ（テキスト表示用）"""
+    if not text:
+        return ""
+    return html.escape(str(text))
 
-SECTION_PROMPTS = {
-    "hero": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
-
-【基本情報】
-- テンプレート名: {template_name}
-- セクション種別: hero（ヒーローセクション）
-- 参照URL: {reference_url}
-- 説明: {description}
-
-【セクションの特徴】
-heroセクションは、LPのファーストビューを担う最重要セクションです。
-- メインメッセージで価値を即座に伝える
-- ビジュアルで感情に訴える
-- CTAで次のアクションを明確化
-
-【出力すべきJSON項目】
-```json
-{{
-  "title": "メインタイトル（20-40文字）",
-  "subtitle": "サブタイトル（40-80文字）",
-  "description": "詳細説明（100-200文字）",
-  "cta_primary": "主要CTAボタンテキスト",
-  "cta_secondary": "副次CTAボタンテキスト",
-  "hero_image_description": "ヒーロー画像の説明",
-  "trust_elements": ["信頼要素1", "信頼要素2"],
-  "background_style": "背景スタイル",
-  "layout_type": "レイアウトタイプ"
-}}
-```
-
-上記JSON形式で出力してください。
-""",
-    
-    "features": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
-
-【基本情報】
-- テンプレート名: {template_name}
-- セクション種別: features（機能紹介）
-- 参照URL: {reference_url}
-- 説明: {description}
-
-【出力すべきJSON項目】
-```json
-{{
-  "section_title": "セクションタイトル",
-  "introduction": "導入文",
-  "features": [
-    {{
-      "title": "機能1のタイトル",
-      "description": "機能1の詳細説明",
-      "icon": "アイコン（例: ⚡）"
-    }}
-  ]
-}}
-```
-
-上記JSON形式で出力してください。
-""",
-    
-    "testimonials": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
-
-【基本情報】
-- テンプレート名: {template_name}
-- セクション種別: testimonials（お客様の声）
-- 参照URL: {reference_url}
-- 説明: {description}
-
-【出力すべきJSON項目】
-```json
-{{
-  "section_title": "セクションタイトル",
-  "testimonials": [
-    {{
-      "quote": "お客様のコメント",
-      "author": "氏名",
-      "company": "企業名",
-      "position": "役職"
-    }}
-  ]
-}}
-```
-
-上記JSON形式で出力してください。
-""",
-    
-    "social_proof": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
-
-【基本情報】
-- テンプレート名: {template_name}
-- セクション種別: social_proof（導入企業）
-- 参照URL: {reference_url}
-- 説明: {description}
-
-【出力すべきJSON項目】
-```json
-{{
-  "section_title": "セクションタイトル",
-  "companies": ["企業名1", "企業名2"],
-  "stats": {{
-    "total_companies": "導入企業数",
-    "satisfaction_rate": "満足度",
-    "active_users": "アクティブユーザー数"
-  }}
-}}
-```
-
-上記JSON形式で出力してください。
-""",
-    
-    "faq": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
-
-【基本情報】
-- テンプレート名: {template_name}
-- セクション種別: faq（よくある質問）
-- 参照URL: {reference_url}
-- 説明: {description}
-
-【出力すべきJSON項目】
-```json
-{{
-  "section_title": "セクションタイトル",
-  "questions": [
-    {{
-      "question": "質問1",
-      "answer": "回答1"
-    }}
-  ]
-}}
-```
-
-上記JSON形式で出力してください。
-"""
-}
-
-SECTION_LABELS = {
-    "hero": "🚀 ヒーローセクション",
-    "features": "⚡ 機能紹介",
-    "testimonials": "💬 お客様の声",
-    "social_proof": "🏆 導入企業",
-    "faq": "❓ よくある質問"
-}
-
-# ===== HTML生成関数 =====
-
-def generate_section_preview(template):
-    """セクションのHTMLプレビューを生成"""
-    section_type = template.get('section_type', 'hero')
-    
-    if section_type == 'hero':
-        return generate_hero_preview(template)
-    elif section_type == 'features':
-        return generate_features_preview(template)
-    elif section_type == 'testimonials':
-        return generate_testimonials_preview(template)
-    elif section_type == 'social_proof':
-        return generate_social_proof_preview(template)
-    elif section_type == 'faq':
-        return generate_faq_preview(template)
-    else:
-        return "<p>プレビュー生成中...</p>"
-
-def generate_hero_preview(template):
+def sanitize_user_html(html_content: str) -> str:
     """
-    freee風の完璧な再現を目指したヒーローセクションプレビュー生成
-    
-    対応項目：
-    - タイトルの詳細スタイリング（weight, letter-spacing, line-height）
-    - ボタン上のラベル表示
-    - Trust Badgesの完全実装（アイコン、強調、影）
-    - 右側ビジュアルの重なり効果
-    - 装飾要素（小鳥イラスト等）
+    ユーザー入力HTMLのサニタイズ（XSS対策）
+    - <script>タグの除去
+    - on*属性の除去（onclick, onload等）
+    - javascript:プロトコルの除去
     """
+    if not html_content:
+        return ""
     
-    # === 形式判定 ===
-    has_content_key = 'content' in template
-    has_layout_key = 'layout' in template
-    has_background_key = 'background' in template
-    has_simple_keys = 'title' in template or 'title_size' in template
-    
-    is_advanced_format = has_content_key or (has_simple_keys and (has_layout_key or has_background_key))
-    
-    if is_advanced_format:
-        # === シンプル形式対応（拡張版） ===
-        
-        # タイトル情報（詳細）
-        title_text = template.get('title', 'タイトル')
-        title_size = template.get('title_size', '56px')
-        title_color = template.get('title_color', '#333333')
-        title_weight = template.get('title_weight', '800')
-        title_line_height = template.get('title_line_height', '1.4')
-        title_letter_spacing = template.get('title_letter_spacing', 'normal')
-        
-        # サブタイトル情報
-        subtitle_text = template.get('subtitle', '')
-        subtitle_size = template.get('subtitle_size', '16px')
-        subtitle_color = template.get('subtitle_color', '#666666')
-        subtitle_weight = template.get('subtitle_weight', '400')
-        subtitle_line_height = template.get('subtitle_line_height', '1.75')
-        subtitle_max_width = template.get('subtitle_max_width', '540px')
-        
-        # CTA情報（拡張版：label_above対応）
-        cta_section = template.get('cta_section', {})
-        cta_buttons = cta_section.get('buttons', [])
-        cta_gap = cta_section.get('gap', '16px')
-        
-        cta_html = ""
-        if cta_buttons:
-            btn_items = []
-            for btn in cta_buttons:
-                # ボタン上のラベル
-                label_above = btn.get('label_above', {})
-                label_html = ""
-                if label_above and label_above.get('text'):
-                    label_text = label_above.get('text', '')
-                    label_size = label_above.get('font_size', '12px')
-                    label_color = label_above.get('color', '#666666')
-                    label_weight = label_above.get('weight', '400')
-                    label_html = f"""
-                    <div style='font-size: {label_size}; color: {label_color}; font-weight: {label_weight}; 
-                                margin-bottom: 8px; text-align: left;'>
-                        {label_text}
-                    </div>
-                    """
-                
-                # ボタン本体
-                btn_text = btn.get('text', 'ボタン')
-                btn_width = btn.get('width', '240px')
-                btn_height = btn.get('height', '64px')
-                btn_font_size = btn.get('font_size', '18px')
-                btn_font_weight = btn.get('font_weight', 'bold')
-                btn_bg = btn.get('background', '#0066FF')
-                btn_color = btn.get('color', '#FFFFFF')
-                btn_border = btn.get('border', 'none')
-                btn_border_radius = btn.get('border_radius', '32px')
-                btn_shadow = btn.get('shadow', '0 4px 16px rgba(0, 102, 255, 0.3)')
-                
-                btn_items.append(f"""
-                <div style='display: flex; flex-direction: column; align-items: flex-start;'>
-                    {label_html}
-                    <button style='width: {btn_width}; height: {btn_height}; 
-                                    font-size: {btn_font_size}; font-weight: {btn_font_weight}; 
-                                    background: {btn_bg}; color: {btn_color}; 
-                                    border: {btn_border}; border-radius: {btn_border_radius}; 
-                                    cursor: pointer; box-shadow: {btn_shadow};
-                                    transition: all 0.3s ease;'>
-                        {btn_text}
-                    </button>
-                </div>
-                """)
-            
-            cta_html = f"""
-            <div style='display: flex; gap: {cta_gap}; margin-bottom: 56px; flex-wrap: wrap;'>
-                {''.join(btn_items)}
-            </div>
-            """
-        else:
-            # フォールバック：シンプル形式
-            cta_primary_text = template.get('cta_primary_text', '無料で始める')
-            cta_primary_bg = template.get('cta_primary_bg', '#0066FF')
-            cta_secondary_text = template.get('cta_secondary_text', '資料請求')
-            
-            cta_html = f"""
-            <div style='display: flex; gap: 16px; margin-bottom: 56px; flex-wrap: wrap;'>
-                <button style='width: 240px; height: 64px; font-size: 18px; font-weight: bold; 
-                                background: {cta_primary_bg}; color: #FFFFFF; border: none; 
-                                border-radius: 32px; cursor: pointer; 
-                                box-shadow: 0 4px 16px rgba(0, 102, 255, 0.3);'>
-                    {cta_primary_text}
-                </button>
-                <button style='width: 240px; height: 64px; font-size: 18px; font-weight: bold; 
-                                background: transparent; color: {cta_primary_bg}; 
-                                border: 2px solid {cta_primary_bg}; border-radius: 32px; cursor: pointer;'>
-                    {cta_secondary_text}
-                </button>
-            </div>
-            """
-        
-        # Trust Badges（完全実装版）
-        trust_badges = template.get('trust_badges', {})
-        trust_items = trust_badges.get('items', [])
-        trust_gap = trust_badges.get('gap', '32px')
-        
-        trust_html = ""
-        if trust_items:
-            badge_list = []
-            for item in trust_items:
-                icon = item.get('icon', '')
-                text_main = item.get('text_main', '')
-                text_highlight = item.get('text_highlight', '')
-                text_value = item.get('text_value', '')
-                text_unit = item.get('text_unit', '')
-                
-                font_size = item.get('font_size', '13px')
-                highlight_size = item.get('highlight_size', '16px')
-                value_size = item.get('value_size', '28px')
-                value_color = item.get('value_color', '#0066FF')
-                
-                width = item.get('width', '200px')
-                height = item.get('height', '140px')
-                bg = item.get('background', '#ffffff')
-                border = item.get('border', '1px solid #e8e8e8')
-                border_radius = item.get('border_radius', '12px')
-                padding = item.get('padding', '20px 16px')
-                shadow = item.get('shadow', '0 2px 8px rgba(0, 0, 0, 0.06)')
-                
-                # バッジHTML構築
-                badge_content = f"""
-                <div style='width: {width}; height: {height}; background: {bg}; 
-                            border: {border}; border-radius: {border_radius}; padding: {padding};
-                            box-shadow: {shadow}; display: flex; flex-direction: column; 
-                            align-items: center; justify-content: center; text-align: center;'>
-                    <div style='font-size: 32px; margin-bottom: 8px;'>{icon}</div>
-                    <div style='font-size: {font_size}; color: #666; margin-bottom: 4px;'>{text_main}</div>
-                    <div style='font-size: {highlight_size}; color: #333; font-weight: 600; margin-bottom: 8px;'>{text_highlight}</div>
-                    <div style='font-size: {value_size}; color: {value_color}; font-weight: 900;'>
-                        {text_value}<span style='font-size: {font_size}; margin-left: 2px;'>{text_unit}</span>
-                    </div>
-                </div>
-                """
-                badge_list.append(badge_content)
-            
-            trust_html = f"""
-            <div style='display: flex; gap: {trust_gap}; flex-wrap: wrap;'>
-                {''.join(badge_list)}
-            </div>
-            """
-        else:
-            # フォールバック：シンプル形式
-            trust_badge_1 = template.get('trust_badge_1', '')
-            trust_badge_2 = template.get('trust_badge_2', '')
-            if trust_badge_1 or trust_badge_2:
-                badges = []
-                if trust_badge_1:
-                    badges.append(f"""
-                    <div style='width: 200px; height: 120px; background: #ffffff; border: 1px solid #e8e8e8;
-                                border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-                                display: flex; align-items: center; justify-content: center; text-align: center; 
-                                font-size: 14px; font-weight: bold; color: #333;'>
-                        {trust_badge_1}
-                    </div>
-                    """)
-                if trust_badge_2:
-                    badges.append(f"""
-                    <div style='width: 200px; height: 120px; background: #ffffff; border: 1px solid #e8e8e8;
-                                border-radius: 12px; padding: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-                                display: flex; align-items: center; justify-content: center; text-align: center; 
-                                font-size: 14px; font-weight: bold; color: #333;'>
-                        {trust_badge_2}
-                    </div>
-                    """)
-                trust_html = f"<div style='display: flex; gap: 32px; flex-wrap: wrap;'>{''.join(badges)}</div>"
-        
-        # 右側ビジュアル（重なり効果）
-        right_visual = template.get('right_visual', {})
-        visual_images = right_visual.get('images', [])
-        
-        right_visual_html = ""
-        if visual_images and len(visual_images) >= 2:
-            # 2つの画像を重ねて表示
-            img1 = visual_images[0]
-            img2 = visual_images[1]
-            
-            img1_width = img1.get('width', '520px')
-            img1_height = img1.get('height', '360px')
-            img1_rotation = img1.get('rotation', '-3deg')
-            img1_z = img1.get('z_index', 2)
-            img1_shadow = img1.get('shadow', '0 20px 60px rgba(0, 0, 0, 0.15)')
-            img1_bg = img1.get('placeholder_color', '#f5f7fa')
-            img1_border = img1.get('border', '1px solid #e0e0e0')
-            img1_radius = img1.get('border_radius', '12px')
-            img1_desc = img1.get('description', 'プロダクト画面1')
-            
-            img2_width = img2.get('width', '480px')
-            img2_height = img2.get('height', '340px')
-            img2_rotation = img2.get('rotation', '2deg')
-            img2_z = img2.get('z_index', 1)
-            img2_shadow = img2.get('shadow', '0 15px 45px rgba(0, 0, 0, 0.12)')
-            img2_bg = img2.get('placeholder_color', '#ffffff')
-            img2_border = img2.get('border', '1px solid #e0e0e0')
-            img2_radius = img2.get('border_radius', '12px')
-            img2_desc = img2.get('description', 'プロダクト画面2')
-            
-            right_visual_html = f"""
-            <div style='position: relative; width: 650px; height: 450px;'>
-                <!-- 背面の画像 -->
-                <div style='position: absolute; top: 40px; right: 0; width: {img2_width}; height: {img2_height};
-                            background: {img2_bg}; border: {img2_border}; border-radius: {img2_radius};
-                            transform: rotate({img2_rotation}); z-index: {img2_z}; box-shadow: {img2_shadow};
-                            display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;'>
-                    {img2_desc}
-                </div>
-                <!-- 前面の画像 -->
-                <div style='position: absolute; top: 0; left: 0; width: {img1_width}; height: {img1_height};
-                            background: {img1_bg}; border: {img1_border}; border-radius: {img1_radius};
-                            transform: rotate({img1_rotation}); z-index: {img1_z}; box-shadow: {img1_shadow};
-                            display: flex; align-items: center; justify-content: center; color: #999; font-size: 14px;'>
-                    {img1_desc}
-                </div>
-            </div>
-            """
-        else:
-            # フォールバック：シンプルな枠
-            right_visual_html = """
-            <div style='width: 600px; height: 400px; background: rgba(255, 255, 255, 0.5); 
-                        border-radius: 12px; display: flex; align-items: center; justify-content: center; 
-                        color: #999; font-size: 16px; border: 2px dashed #ccc;'>
-                プロダクト画像エリア
-            </div>
-            """
-        
-        # 装飾要素（小鳥イラスト等）
-        decorative_elements = template.get('decorative_elements', [])
-        decorative_html = ""
-        for elem in decorative_elements:
-            if elem.get('type') == 'illustration':
-                emoji = elem.get('emoji', '🐦')
-                size = elem.get('size', '64px')
-                position = elem.get('position', 'title_top_right')
-                
-                # タイトル右上に配置
-                decorative_html = f"""
-                <div style='position: absolute; top: -20px; right: -40px; font-size: {size}; opacity: 0.9;'>
-                    {emoji}
-                </div>
-                """
-        
-        # レイアウト判定
-        layout_value = template.get('layout', '')
-        if layout_value in ['left_right_split', 'two_column_split']:
-            layout_structure = 'two_column_split'
-        else:
-            layout_structure = 'center'
-        
-        # 背景
-        bg_value = template.get('background', '')
-        if bg_value and 'linear-gradient' in bg_value:
-            bg_gradient = bg_value
-        else:
-            bg_gradient = "linear-gradient(135deg, #E8F4FD 0%, #F0F0FA 35%, #FAFBFF 70%, #FFFFFF 100%)"
-        
-        # スペーシング
-        spacing = template.get('spacing', {})
-        left_width = spacing.get('left_column_width', '48%')
-        right_width = spacing.get('right_column_width', '52%')
-        container_padding = spacing.get('container_padding', '100px 80px')
-        
-        # HTML生成（左右分割レイアウト）
-        if layout_structure == 'two_column_split':
-            return f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="utf-8">
-                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-                <style>
-                    * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-                    body {{ 
-                        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-                        background: {bg_gradient}; 
-                        min-height: 100vh;
-                        -webkit-font-smoothing: antialiased;
-                    }}
-                    .hero-container {{ 
-                        display: flex; 
-                        min-height: 100vh; 
-                        align-items: center; 
-                        padding: {container_padding};
-                    }}
-                    .left-column {{ 
-                        width: {left_width}; 
-                        padding-right: 60px;
-                        position: relative;
-                    }}
-                    .right-column {{ 
-                        width: {right_width}; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center;
-                    }}
-                    .main-title {{ 
-                        font-size: {title_size}; 
-                        font-weight: {title_weight}; 
-                        color: {title_color}; 
-                        line-height: {title_line_height}; 
-                        letter-spacing: {title_letter_spacing};
-                        margin-bottom: 28px; 
-                        white-space: pre-line;
-                        position: relative;
-                    }}
-                    .subtitle {{ 
-                        font-size: {subtitle_size}; 
-                        font-weight: {subtitle_weight};
-                        color: {subtitle_color}; 
-                        line-height: {subtitle_line_height}; 
-                        max-width: {subtitle_max_width}; 
-                        margin-bottom: 48px;
-                    }}
-                </style>
-            </head>
-            <body>
-                <div class="hero-container">
-                    <div class="left-column">
-                        <h1 class="main-title">
-                            {title_text}
-                            {decorative_html}
-                        </h1>
-                        <div class="subtitle">{subtitle_text}</div>
-                        {cta_html}
-                        {trust_html}
-                    </div>
-                    <div class="right-column">
-                        {right_visual_html}
-                    </div>
-                </div>
-            </body>
-            </html>
-            """
-    
-    # === レガシー形式（後方互換性） ===
-    title = template.get('title', 'タイトル')
-    subtitle = template.get('subtitle', 'サブタイトル')
-    description = template.get('description', '説明文')
-    cta_primary = template.get('cta_primary', '無料で始める')
-    cta_secondary = template.get('cta_secondary', '資料請求')
-    trust_elements = template.get('trust_elements', [])
-    
-    trust_html = ""
-    if trust_elements:
-        badges = [f"<span style='background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 8px 16px; border-radius: 20px; font-size: 14px;'>{elem}</span>" 
-                 for elem in trust_elements]
-        trust_html = f"<div style='display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 24px;'>{''.join(badges)}</div>"
-    
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ 
-                font-family: 'Inter', sans-serif; 
-                background: linear-gradient(135deg, #f5f7fa 0%, #ffffff 100%);
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 40px;
-            }}
-            .container {{
-                max-width: 1200px;
-                text-align: center;
-                color: #333;
-            }}
-            h1 {{
-                font-size: clamp(2rem, 5vw, 4rem);
-                font-weight: 800;
-                margin-bottom: 24px;
-                line-height: 1.2;
-                color: #1a202c;
-            }}
-            .subtitle {{
-                font-size: clamp(1rem, 2vw, 1.5rem);
-                color: #4a5568;
-                margin-bottom: 16px;
-                font-weight: 500;
-            }}
-            .description {{
-                font-size: 1.1rem;
-                color: #718096;
-                margin-bottom: 32px;
-                max-width: 800px;
-                margin-left: auto;
-                margin-right: auto;
-            }}
-            .cta-buttons {{
-                display: flex;
-                gap: 16px;
-                justify-content: center;
-                flex-wrap: wrap;
-                margin-bottom: 24px;
-            }}
-            .cta-primary {{
-                background: #3b82f6;
-                color: white;
-                padding: 16px 48px;
-                border-radius: 12px;
-                font-weight: 700;
-                font-size: 1.1rem;
-                border: none;
-                cursor: pointer;
-            }}
-            .cta-secondary {{
-                background: transparent;
-                color: #3b82f6;
-                padding: 16px 48px;
-                border-radius: 12px;
-                font-weight: 700;
-                font-size: 1.1rem;
-                border: 2px solid #3b82f6;
-                cursor: pointer;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>{title}</h1>
-            <div class="subtitle">{subtitle}</div>
-            <div class="description">{description}</div>
-            <div class="cta-buttons">
-                <button class="cta-primary">{cta_primary}</button>
-                <button class="cta-secondary">{cta_secondary}</button>
-            </div>
-            {trust_html}
-        </div>
-    </body>
-    </html>
-    """
-
-
-def generate_features_preview(template):
-    """機能セクションのプレビュー生成"""
-    section_title = template.get('section_title', '主要機能')
-    introduction = template.get('introduction', '')
-    features = template.get('features', [])
-    
-    features_html = ""
-    for feature in features:
-        features_html += f"""
-        <div style='background: white; border-radius: 12px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);'>
-            <div style='font-size: 2.5rem; margin-bottom: 16px;'>{feature.get('icon', '⚡')}</div>
-            <h3 style='font-size: 1.5rem; color: #1f2937; margin-bottom: 12px; font-weight: 700;'>{feature.get('title', '機能名')}</h3>
-            <p style='color: #6b7280; line-height: 1.6;'>{feature.get('description', '機能説明')}</p>
-        </div>
-        """
-    
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ 
-                font-family: 'Inter', sans-serif; 
-                background: #f9fafb;
-                padding: 60px 40px;
-            }}
-            .container {{ max-width: 1200px; margin: 0 auto; }}
-            h2 {{
-                font-size: 2.5rem;
-                font-weight: 800;
-                color: #1f2937;
-                text-align: center;
-                margin-bottom: 16px;
-            }}
-            .intro {{
-                text-align: center;
-                color: #6b7280;
-                font-size: 1.1rem;
-                margin-bottom: 48px;
-                max-width: 800px;
-                margin-left: auto;
-                margin-right: auto;
-            }}
-            .features-grid {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-                gap: 32px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>{section_title}</h2>
-            <div class="intro">{introduction}</div>
-            <div class="features-grid">
-                {features_html}
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-def generate_testimonials_preview(template):
-    """テスティモニアルのプレビュー生成"""
-    section_title = template.get('section_title', 'お客様の声')
-    testimonials = template.get('testimonials', [])
-    
-    testimonials_html = ""
-    for testimonial in testimonials:
-        testimonials_html += f"""
-        <div style='background: white; border-radius: 12px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);'>
-            <p style='color: #1f2937; font-size: 1.1rem; line-height: 1.8; margin-bottom: 24px; font-style: italic;'>
-                "{testimonial.get('quote', 'コメント')}"
-            </p>
-            <div style='border-top: 2px solid #e5e7eb; padding-top: 16px;'>
-                <div style='font-weight: 700; color: #1f2937; margin-bottom: 4px;'>{testimonial.get('author', '名前')}</div>
-                <div style='color: #6b7280; font-size: 0.9rem;'>{testimonial.get('position', '役職')} - {testimonial.get('company', '企業名')}</div>
-            </div>
-        </div>
-        """
-    
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ 
-                font-family: 'Inter', sans-serif; 
-                background: #f9fafb;
-                padding: 60px 40px;
-            }}
-            .container {{ max-width: 1200px; margin: 0 auto; }}
-            h2 {{
-                font-size: 2.5rem;
-                font-weight: 800;
-                color: #1f2937;
-                text-align: center;
-                margin-bottom: 48px;
-            }}
-            .testimonials-grid {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-                gap: 32px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>{section_title}</h2>
-            <div class="testimonials-grid">
-                {testimonials_html}
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-def generate_social_proof_preview(template):
-    """導入企業のプレビュー生成"""
-    section_title = template.get('section_title', '導入企業')
-    companies = template.get('companies', [])
-    stats = template.get('stats', {})
-    
-    companies_html = ""
-    for company in companies:
-        companies_html += f"""
-        <div style='background: white; border-radius: 8px; padding: 24px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05);'>
-            <span style='font-weight: 600; color: #6b7280;'>{company}</span>
-        </div>
-        """
-    
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ 
-                font-family: 'Inter', sans-serif; 
-                background: #f9fafb;
-                padding: 60px 40px;
-            }}
-            .container {{ max-width: 1200px; margin: 0 auto; }}
-            h2 {{
-                font-size: 2.5rem;
-                font-weight: 800;
-                color: #1f2937;
-                text-align: center;
-                margin-bottom: 48px;
-            }}
-            .stats {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 32px;
-                margin-bottom: 48px;
-            }}
-            .stat-item {{
-                text-align: center;
-            }}
-            .stat-value {{
-                font-size: 3rem;
-                font-weight: 800;
-                color: #667eea;
-                margin-bottom: 8px;
-            }}
-            .stat-label {{
-                color: #6b7280;
-                font-size: 1rem;
-            }}
-            .companies-grid {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 16px;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>{section_title}</h2>
-            <div class="stats">
-                <div class="stat-item">
-                    <div class="stat-value">{stats.get('total_companies', '1,000')}</div>
-                    <div class="stat-label">導入企業数</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">{stats.get('satisfaction_rate', '98')}%</div>
-                    <div class="stat-label">顧客満足度</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-value">{stats.get('active_users', '50,000')}</div>
-                    <div class="stat-label">アクティブユーザー</div>
-                </div>
-            </div>
-            <div class="companies-grid">
-                {companies_html}
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-def generate_faq_preview(template):
-    """FAQのプレビュー生成"""
-    section_title = template.get('section_title', 'よくある質問')
-    questions = template.get('questions', [])
-    
-    faq_html = ""
-    for i, faq in enumerate(questions):
-        faq_html += f"""
-        <div style='border-bottom: 1px solid #e5e7eb; padding: 24px 0;'>
-            <div style='font-weight: 700; color: #1f2937; font-size: 1.1rem; margin-bottom: 12px;'>
-                Q. {faq.get('question', '質問')}
-            </div>
-            <div style='color: #6b7280; line-height: 1.6; padding-left: 24px;'>
-                A. {faq.get('answer', '回答')}
-            </div>
-        </div>
-        """
-    
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ 
-                font-family: 'Inter', sans-serif; 
-                background: #f9fafb;
-                padding: 60px 40px;
-            }}
-            .container {{ max-width: 900px; margin: 0 auto; }}
-            h2 {{
-                font-size: 2.5rem;
-                font-weight: 800;
-                color: #1f2937;
-                text-align: center;
-                margin-bottom: 48px;
-            }}
-            .faq-container {{
-                background: white;
-                border-radius: 12px;
-                padding: 32px;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>{section_title}</h2>
-            <div class="faq-container">
-                {faq_html}
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-
-# ===== スマートバックアップ機能 =====
-
-def show_smart_backup_alert(template_data):
-    """新規テンプレート作成時のスマートバックアップアラート"""
-    if not st.session_state.get('show_backup_alerts', True):
-        return
-    
-    template_name = template_data.get('name', '新規テンプレート')
-    
-    alert_html = f"""
-    <div class="backup-alert">
-        <h3>🎉 テンプレート「{html.escape(template_name)}」を保存しました！</h3>
-        <p style="margin-bottom: 15px; color: #e0e7ff;">💡 <strong>今すぐバックアップしませんか？</strong> 
-        データが消失する前に、1クリックで安全に保存できます。</p>
-        
-        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-            <button onclick="copyToClipboard()" id="copyBtn" class="cyber-button">
-                📋 クリップボードにコピー
-            </button>
-            <button onclick="downloadTemplate()" id="downloadBtn" class="cyber-button">
-                💾 ファイルでダウンロード
-            </button>
-        </div>
-    </div>
-    
-    <script>
-    function copyToClipboard() {{
-        const templateData = {json.dumps(template_data, ensure_ascii=False)};
-        const jsonString = JSON.stringify(templateData, null, 2);
-        
-        if (navigator.clipboard) {{
-            navigator.clipboard.writeText(jsonString).then(function() {{
-                document.getElementById('copyBtn').innerHTML = '✅ コピー完了！';
-                setTimeout(() => {{
-                    document.getElementById('copyBtn').innerHTML = '📋 クリップボードにコピー';
-                }}, 2000);
-            }});
-        }}
-    }}
-    
-    function downloadTemplate() {{
-        const templateData = {json.dumps(template_data, ensure_ascii=False)};
-        const jsonString = JSON.stringify(templateData, null, 2);
-        const blob = new Blob([jsonString], {{ type: 'application/json' }});
-        const url = URL.createObjectURL(blob);
-        
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'template_{template_data.get('name', 'unnamed').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        document.getElementById('downloadBtn').innerHTML = '✅ ダウンロード完了！';
-        setTimeout(() => {{
-            document.getElementById('downloadBtn').innerHTML = '💾 ファイルでダウンロード';
-        }}, 2000);
-    }}
-    </script>
-    """
-    
-    st.markdown(alert_html, unsafe_allow_html=True)
-
-def create_quick_backup_sidebar():
-    """サイドバーのクイックバックアップ機能"""
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### ⚡ クイックバックアップ")
-    
-    template_count = len(st.session_state.templates) if st.session_state.templates else 0
-    
-    if template_count > 0:
-        st.sidebar.info(f"現在 **{template_count}個** のテンプレートを保存中")
-        
-        backup_data = create_backup_data()
-        if backup_data:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"lp_templates_backup_{timestamp}.json"
-            
-            st.sidebar.download_button(
-                label="💾 全テンプレートをダウンロード",
-                data=backup_data,
-                file_name=filename,
-                mime="application/json",
-                use_container_width=True
-            )
-    
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### ⚙️ 設定")
-    
-    show_alerts = st.sidebar.checkbox(
-        "バックアップアラートを表示",
-        value=st.session_state.get('show_backup_alerts', True)
+    # <script>タグの除去
+    sanitized = re.sub(
+        r'<script[^>]*>.*?</script>', 
+        '', 
+        html_content, 
+        flags=re.DOTALL | re.IGNORECASE
     )
-    st.session_state.show_backup_alerts = show_alerts
-
-def create_backup_data():
-    """バックアップデータを作成"""
-    if not st.session_state.templates:
-        return None
     
+    # on*属性の除去
+    sanitized = re.sub(
+        r'\s+on\w+\s*=\s*["\'][^"\']*["\']', 
+        '', 
+        sanitized, 
+        flags=re.IGNORECASE
+    )
+    
+    # javascript:プロトコルの除去
+    sanitized = re.sub(
+        r'href\s*=\s*["\']javascript:[^"\']*["\']', 
+        'href="#"', 
+        sanitized, 
+        flags=re.IGNORECASE
+    )
+    
+    return sanitized
+
+def check_html_size(html_content: str, max_size_mb: float = 1.0) -> tuple[bool, str]:
+    """
+    HTMLサイズチェック
+    Returns: (is_valid, error_message)
+    """
+    size_bytes = len(html_content.encode('utf-8'))
+    size_mb = size_bytes / (1024 * 1024)
+    
+    if size_mb > max_size_mb:
+        return False, f"HTMLサイズが大きすぎます: {size_mb:.2f}MB (上限: {max_size_mb}MB)"
+    
+    return True, ""
+
+def check_base64_images(html_content: str) -> tuple[bool, str]:
+    """
+    base64埋め込み画像のチェック
+    Returns: (is_valid, warning_message)
+    """
+    base64_pattern = r'data:image/[^;]+;base64,'
+    matches = re.findall(base64_pattern, html_content, re.IGNORECASE)
+    
+    if matches:
+        return False, f"⚠️ base64埋め込み画像が{len(matches)}個検出されました。URL参照に変更してください。"
+    
+    return True, ""
+
+def validate_html_structure(html_content: str) -> tuple[bool, str]:
+    """
+    HTML構造の基本的な検証
+    Returns: (is_valid, error_message)
+    """
+    # DOCTYPE or <html>タグの存在チェック
+    if not (re.search(r'<!DOCTYPE\s+html', html_content, re.IGNORECASE) or 
+            re.search(r'<html', html_content, re.IGNORECASE)):
+        return False, "❌ 有効なHTML構造ではありません。<!DOCTYPE html>または<html>タグが必要です。"
+    
+    return True, ""
+
+# ===== セッション状態の初期化 =====
+if 'templates' not in st.session_state:
+    st.session_state.templates = []
+
+if 'drafts' not in st.session_state:
+    st.session_state.drafts = []
+
+if 'current_mode' not in st.session_state:
+    st.session_state.current_mode = 'template'
+
+# ===== テンプレート管理関数 =====
+def save_template(template_data: Dict):
+    """テンプレートを保存"""
+    template_data['created_at'] = datetime.now().isoformat()
+    template_data['id'] = len(st.session_state.templates) + 1
+    st.session_state.templates.append(template_data)
+
+def save_draft(draft_data: Dict):
+    """下書きを保存"""
+    draft_data['saved_at'] = datetime.now().isoformat()
+    draft_data['id'] = len(st.session_state.drafts) + 1
+    st.session_state.drafts.append(draft_data)
+
+def export_templates() -> str:
+    """全テンプレートをJSON文字列としてエクスポート"""
     export_data = {
-        'export_date': datetime.now().isoformat(),
-        'version': '1.0',
-        'total_templates': len(st.session_state.templates),
-        'templates': st.session_state.templates
+        'templates': st.session_state.templates,
+        'drafts': st.session_state.drafts,
+        'exported_at': datetime.now().isoformat()
     }
-    
-    return json.dumps(export_data, ensure_ascii=False, indent=2).encode('utf-8')
+    return json.dumps(export_data, indent=2, ensure_ascii=False)
 
-# ===== ユーティリティ関数 =====
-
-def init_session_state():
-    """セッションステート初期化"""
-    if 'templates' not in st.session_state:
-        st.session_state.templates = {}
-    if 'current_mode' not in st.session_state:
-        st.session_state.current_mode = "template_registration"
-    if 'show_backup_alerts' not in st.session_state:
-        st.session_state.show_backup_alerts = True
-
-def save_template(template_data):
-    """テンプレートを安全に保存"""
+def import_templates(json_str: str) -> bool:
+    """JSON文字列からテンプレートをインポート"""
     try:
-        if not isinstance(template_data, dict):
-            st.error("❌ 無効なテンプレートデータです")
-            return False
-        
-        if not template_data.get('name'):
-            st.error("❌ テンプレート名が必要です")
-            return False
-        
-        template_id = str(uuid.uuid4())
-        template_data['id'] = template_id
-        template_data['created_at'] = datetime.now().isoformat()
-        template_data['status'] = 'draft'  # 下書き状態
-        
-        st.session_state.templates[template_id] = template_data
-        show_smart_backup_alert(template_data)
-        
+        data = json.loads(json_str)
+        if 'templates' in data:
+            st.session_state.templates = data['templates']
+        if 'drafts' in data:
+            st.session_state.drafts = data['drafts']
         return True
-    
     except Exception as e:
-        st.error(f"❌ 保存エラー: {str(e)}")
+        st.error(f"インポートエラー: {str(e)}")
         return False
 
-# ===== メインアプリケーション =====
-
-def main():
-    """メインアプリケーション"""
-    init_session_state()
+# ===== サイドバー =====
+with st.sidebar:
+    st.title("🎨 LP Template Manager")
+    st.markdown("### HTML Edition")
+    st.markdown("---")
     
-    st.title("🔮 LP Template Manager - Cyberpunk Edition")
-    st.markdown("**BtoB SaaS特化のLPテンプレート管理ツール**")
+    mode = st.radio(
+        "モード選択",
+        options=['template', 'design'],
+        format_func=lambda x: "📝 テンプレート登録" if x == 'template' else "🎨 デザイン作成"
+    )
+    st.session_state.current_mode = mode
     
-    with st.sidebar:
-        st.markdown("## 🎛️ 操作パネル")
-        
-        mode = st.radio(
-            "モードを選択してください",
-            ["template_registration", "design_creation"],
-            format_func=lambda x: "📝 テンプレート登録" if x == "template_registration" else "🎨 デザイン作成"
+    st.markdown("---")
+    st.markdown("### 📊 統計")
+    st.metric("登録テンプレート", len(st.session_state.templates))
+    st.metric("下書き", len(st.session_state.drafts))
+    
+    # テンプレート形式の内訳
+    html_count = sum(1 for t in st.session_state.templates if t.get('template_type') == 'html')
+    json_count = sum(1 for t in st.session_state.templates if t.get('template_type') == 'json')
+    st.caption(f"HTML形式: {html_count} / JSON形式: {json_count}")
+    
+    st.markdown("---")
+    st.markdown("### 💾 データ管理")
+    
+    # エクスポート
+    if st.button("📤 全データをエクスポート"):
+        export_json = export_templates()
+        st.download_button(
+            label="💾 JSONをダウンロード",
+            data=export_json,
+            file_name=f"lp_templates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
         )
-        
-        st.session_state.current_mode = mode
-        create_quick_backup_sidebar()
     
-    if st.session_state.current_mode == "template_registration":
-        show_template_registration_mode()
-    else:
-        show_design_creation_mode()
+    # インポート
+    uploaded_file = st.file_uploader("📥 JSONをインポート", type=['json'])
+    if uploaded_file:
+        json_str = uploaded_file.read().decode('utf-8')
+        if st.button("インポート実行"):
+            if import_templates(json_str):
+                st.success("✅ インポート成功！")
+                st.rerun()
 
-def show_template_registration_mode():
-    """テンプレート登録モード（タブ切り替え式）"""
-    
-    st.markdown("""
-    <div class="help-box">
-        💡 <strong>使い方:</strong> 4つのステップでテンプレートを登録します<br>
-        ① 基本情報入力 → ② プロンプト生成・ChatGPTへコピー → ③ JSONデータ入力＋プレビュー → ④ 保存・管理
-    </div>
-    """, unsafe_allow_html=True)
+# ===== メインコンテンツ =====
+if st.session_state.current_mode == 'template':
+    st.title("📝 テンプレート登録モード")
     
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📝 Step 1: 基本情報",
+        "📋 Step 1: 事例収集",
         "🤖 Step 2: プロンプト生成",
-        "📋 Step 3: JSONデータ＋プレビュー",
-        "💾 Step 4: 保存・管理"
+        "👀 Step 3: プレビュー",
+        "💾 Step 4: 保存"
     ])
     
-    # ===== Step 1: 基本情報 =====
+    # Step 1: 事例収集
     with tab1:
-        st.markdown("### 📌 テンプレートの基本情報を入力")
+        st.header("📋 LP事例の情報を入力")
         
         col1, col2 = st.columns(2)
-        
         with col1:
-            template_name = st.text_input(
-                "テンプレート名",
-                placeholder="例: BtoB向けSaaSLPでかいCTA",
-                key="template_name"
-            )
-            
-            reference_url = st.text_input(
-                "参考URL",
-                placeholder="https://www.freee.co.jp/accounting/fr-oyj79k",
-                key="reference_url"
-            )
+            template_name = st.text_input("テンプレート名", placeholder="例: freee会計 ヒーローセクション")
+            category = st.selectbox("カテゴリ", [
+                "BtoB SaaS",
+                "EC/通販",
+                "教育",
+                "金融",
+                "医療",
+                "その他"
+            ])
         
         with col2:
-            section_type = st.selectbox(
-                "セクション種別",
-                list(SECTION_LABELS.keys()),
-                format_func=lambda x: SECTION_LABELS[x],
-                key="section_type"
-            )
-            
-            description = st.text_area(
-                "説明",
-                placeholder="大きくて見やすいヘッダー",
-                key="template_description",
-                height=100
-            )
+            source_url = st.text_input("元サイトURL", placeholder="https://...")
+            industry = st.text_input("業種", placeholder="例: 会計ソフト")
         
-        st.success("✅ 基本情報の入力が完了しました！次は「Step 2: プロンプト生成」タブへ")
-    
-    # ===== Step 2: プロンプト生成 =====
-    with tab2:
-        st.markdown("### 🤖 ChatGPTに投げるプロンプトを生成")
+        st.markdown("---")
         
-        st.markdown("""
-        <div class="help-box">
-            💡 <strong>このステップでやること:</strong><br>
-            1. 「プロンプトを生成」ボタンをクリック<br>
-            2. 生成されたプロンプトを「コピー」ボタンでコピー<br>
-            3. ChatGPTに貼り付けて、JSONデータを取得<br>
-            4. 取得したJSONを「Step 3」で入力
-        </div>
-        """, unsafe_allow_html=True)
-        
-        if st.button("🚀 プロンプトを生成", key="generate_prompt", type="primary", use_container_width=True):
-            template_name = st.session_state.get('template_name', 'サンプルテンプレート')
-            section_type = st.session_state.get('section_type', 'hero')
-            reference_url = st.session_state.get('reference_url', 'https://example.com')
-            description = st.session_state.get('template_description', '説明なし')
-            
-            if section_type in SECTION_PROMPTS:
-                prompt = SECTION_PROMPTS[section_type].format(
-                    template_name=template_name,
-                    reference_url=reference_url,
-                    description=description
-                )
-                st.session_state.generated_prompt = prompt
-        
-        if 'generated_prompt' in st.session_state:
-            st.markdown("### 📄 生成されたプロンプト")
-            st.markdown(f'<div class="prompt-box">{html.escape(st.session_state.generated_prompt)}</div>', unsafe_allow_html=True)
-            
-            copy_js = f"""
-            <button onclick="copyPrompt()" id="copyPromptBtn" class="cyber-button" style="margin-top: 12px;">
-                📋 プロンプトをコピー
-            </button>
-            
-            <script>
-            function copyPrompt() {{
-                const promptText = {json.dumps(st.session_state.generated_prompt)};
-                
-                if (navigator.clipboard) {{
-                    navigator.clipboard.writeText(promptText).then(function() {{
-                        document.getElementById('copyPromptBtn').innerHTML = '✅ コピーしました！';
-                        setTimeout(() => {{
-                            document.getElementById('copyPromptBtn').innerHTML = '📋 プロンプトをコピー';
-                        }}, 3000);
-                    }});
-                }}
-            }}
-            </script>
-            """
-            st.markdown(copy_js, unsafe_allow_html=True)
-            
-            st.success("✅ ChatGPTに貼り付けて、JSONを取得してください！")
-    
-    # ===== Step 3: JSONデータ＋プレビュー =====
-    with tab3:
-        st.markdown("### 📋 ChatGPTから取得したJSONデータを入力")
-        
-        json_input = st.text_area(
-            "JSONデータ",
-            placeholder='{"title": "タイトル", "subtitle": "サブタイトル", ...}',
-            height=250,
-            key="json_input"
+        # ★新機能：テンプレート形式の選択
+        st.subheader("📝 テンプレート形式")
+        template_type = st.radio(
+            "出力形式を選択",
+            options=['html', 'json'],
+            format_func=lambda x: "🌐 HTML形式（推奨）- ChatGPTが生成したHTMLをそのまま貼り付け" if x == 'html' 
+                                  else "📊 JSON形式（旧方式）- 構造化データで管理",
+            horizontal=True
         )
         
-        col1, col2 = st.columns(2)
+        st.info(f"""
+        **{'HTML形式' if template_type == 'html' else 'JSON形式'}を選択しました**
         
-        with col1:
-            if st.button("📋 JSONをパース＋プレビュー", key="parse_json", type="primary", use_container_width=True):
-                try:
-                    if json_input.strip():
-                        parsed_data = json.loads(json_input)
-                        
-                        template_name = st.session_state.get('template_name', f"テンプレート_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-                        section_type = st.session_state.get('section_type', 'hero')
-                        reference_url = st.session_state.get('reference_url', '')
-                        description = st.session_state.get('template_description', '')
-                        
-                        template_data = {
-                            'name': template_name,
-                            'section_type': section_type,
-                            'reference_url': reference_url,
-                            'description': description,
-                            'created_at': datetime.now().isoformat(),
-                            **parsed_data
-                        }
-                        
-                        st.session_state.temp_template = template_data
-                        st.success("✅ JSONをパースしました！")
-                    else:
-                        st.error("❌ JSONデータを入力してください")
-                        
-                except json.JSONDecodeError as e:
-                    st.error(f"❌ JSON解析エラー: {str(e)}")
-                except Exception as e:
-                    st.error(f"❌ エラー: {str(e)}")
+        {'✅ どんな複雑なデザインでも再現可能' if template_type == 'html' else '⚠️ 構造が複雑な場合は表現に限界があります'}
+        {'✅ ChatGPTが生成したコードをそのまま使える' if template_type == 'html' else '✅ データとして管理しやすい'}
+        {'✅ メンテナンス不要（構造変更に対応不要）' if template_type == 'html' else '⚠️ 新しい構造には関数の拡張が必要'}
+        """)
         
-        with col2:
-            if st.button("🔄 入力をクリア", key="clear_json", use_container_width=True):
-                st.session_state.json_input = ""
-                if 'temp_template' in st.session_state:
-                    del st.session_state.temp_template
-                st.rerun()
+        # セクション選択（JSON形式の場合のみ）
+        if template_type == 'json':
+            section_type = st.selectbox("セクションタイプ", [
+                "hero",
+                "features",
+                "testimonials",
+                "how_it_works",
+                "pricing",
+                "faq",
+                "cta",
+                "social_proof",
+                "comparison",
+                "demo"
+            ])
+        else:
+            section_type = None
         
-        # プレビュー表示
-        if 'temp_template' in st.session_state:
-            st.markdown("---")
-            st.markdown("### 👀 プレビュー")
-            
-            col_preview1, col_preview2 = st.columns([3, 1])
-            
-            with col_preview1:
-                try:
-                    preview_html = generate_section_preview(st.session_state.temp_template)
-                    st.components.v1.html(preview_html, height=600, scrolling=True)
-                except Exception as e:
-                    st.error(f"プレビュー生成エラー: {str(e)}")
-            
-            with col_preview2:
-                st.markdown("💡 **ヒント**: ブラウザで新しいタブを開いてプレビューHTMLを保存して開くことで大画面表示できます。")
-                if st.button("💾 HTMLダウンロード", key="download_preview_html", use_container_width=True):
-                    try:
-                        preview_html = generate_section_preview(st.session_state.temp_template)
-                        st.download_button(
-                            label="⬇️ preview.htmlをダウンロード",
-                            data=preview_html,
-                            file_name="preview.html",
-                            mime="text/html",
-                            use_container_width=True
-                        )
-                    except Exception as e:
-                        st.error(f"エラー: {str(e)}")
-            
-            st.markdown("### 📄 JSONデータ")
-            st.json(st.session_state.temp_template)
-            
-            st.success("✅ プレビュー確認OK！「Step 4」で保存してください。")
+        # 簡易メモ
+        notes = st.text_area(
+            "デザインメモ",
+            placeholder="このLPの特徴やポイントを自由に記述...\n例: 青いCTAカードが2つ横並び、左右分割レイアウト、淡い青のグラデーション背景",
+            height=150
+        )
+        
+        if st.button("✅ Step 2へ進む", type="primary"):
+            st.session_state.step1_data = {
+                'name': template_name,
+                'category': category,
+                'source_url': source_url,
+                'industry': industry,
+                'template_type': template_type,
+                'section_type': section_type,
+                'notes': notes
+            }
+            st.success("✅ 情報を保存しました！Step 2へお進みください。")
     
-    # ===== Step 4: 保存・管理 =====
-    with tab4:
-        st.markdown("### 💾 テンプレートの保存・管理")
+    # Step 2: プロンプト生成
+    with tab2:
+        st.header("🤖 ChatGPT用プロンプトを生成")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("💾 テンプレート保存", key="save_template", type="primary", use_container_width=True):
-                if 'temp_template' in st.session_state:
-                    success = save_template(st.session_state.temp_template)
-                    if success:
-                        if 'temp_template' in st.session_state:
-                            del st.session_state.temp_template
-                        st.rerun()
-                else:
-                    st.error("❌ 先にStep 3でJSONをパースしてください")
-        
-        with col2:
-            if st.button("🗑️ 作業をクリア", key="clear_all", use_container_width=True):
-                keys_to_clear = ['template_name', 'reference_url', 'section_type', 'template_description', 
-                                'json_input', 'temp_template', 'generated_prompt']
-                for key in keys_to_clear:
-                    if key in st.session_state:
-                        del st.session_state[key]
-                st.success("✅ 作業内容をクリアしました")
-                st.rerun()
-        
-        # 保存済みテンプレート一覧
-        if st.session_state.templates:
-            st.markdown("---")
-            st.markdown("### 📚 保存済みテンプレート一覧")
+        if 'step1_data' not in st.session_state:
+            st.warning("⚠️ まずStep 1で基本情報を入力してください。")
+        else:
+            data = st.session_state.step1_data
             
-            for template_id, template in st.session_state.templates.items():
-                status = template.get('status', 'draft')
-                status_emoji = "📝" if status == "draft" else "✅"
-                
-                with st.expander(f"{status_emoji} {template.get('name', '無名')} - {SECTION_LABELS.get(template.get('section_type', 'unknown'), '不明')}"):
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        st.write(f"**作成:** {template.get('created_at', 'N/A')[:19]}")
-                        st.write(f"**状態:** {status}")
-                    
-                    with col2:
-                        if st.button("👁️ プレビュー", key=f"preview_{template_id}", use_container_width=True):
-                            st.session_state.preview_template = template
-                    
-                    with col3:
-                        if st.button("🎨 編集", key=f"edit_{template_id}", use_container_width=True):
-                            st.session_state.selected_template = template_id
-                            st.session_state.current_mode = "design_creation"
-                            st.rerun()
-                    
-                    with col4:
-                        if st.button("🗑️ 削除", key=f"delete_{template_id}", use_container_width=True):
-                            del st.session_state.templates[template_id]
-                            st.success("✅ 削除しました")
-                            st.rerun()
-                    
-                    # 承認ボタン（下書きの場合のみ）
-                    if status == 'draft':
-                        if st.button("✅ 承認", key=f"approve_{template_id}", use_container_width=True):
-                            st.session_state.templates[template_id]['status'] = 'approved'
-                            st.success("✅ テンプレートを承認しました")
-                            st.rerun()
-                    
-                    # プレビュー表示
-                    if st.session_state.get('preview_template', {}).get('id') == template_id:
-                        st.markdown("---")
-                        st.markdown("#### プレビュー")
-                        try:
-                            preview_html = generate_section_preview(template)
-                            st.components.v1.html(preview_html, height=500, scrolling=True)
-                        except Exception as e:
-                            st.error(f"プレビューエラー: {str(e)}")
-                    
-                    # JSONデータ表示
-                    with st.expander("📄 JSONデータを表示"):
-                        st.json(template)
+            st.info(f"""
+            **テンプレート名**: {data['name']}  
+            **カテゴリ**: {data['category']}  
+            **形式**: {data['template_type'].upper()}
+            {f"**セクション**: {data['section_type']}" if data['section_type'] else ""}
+            """)
+            
+            # プロンプト生成（HTML形式 or JSON形式）
+            if data['template_type'] == 'html':
+                # HTML形式のプロンプト
+                prompt = f"""以下のLP事例を分析し、完全なHTML+CSSコードを生成してください。
 
-def show_design_creation_mode():
-    """デザイン作成モード"""
-    st.markdown("### 🎨 デザイン作成モード")
+【基本情報】
+- テンプレート名: {data['name']}
+- カテゴリ: {data['category']}
+- 業種: {data['industry']}
+- 元サイトURL: {data['source_url']}
+
+【デザインメモ】
+{data['notes']}
+
+【重要な要件】
+1. <!DOCTYPE html>から</html>までの完全なコード
+2. Tailwind CDN または インラインCSSを使用
+3. レスポンシブ対応（max-width: 1200px推奨）
+4. 画像はURL参照のみ（src="https://..."）
+   ❌ base64埋め込みは禁止
+5. <script>タグは使用しない（純粋なHTML+CSSのみ）
+6. フォントはGoogle Fonts CDN使用可
+7. 元サイトのデザインを可能な限り忠実に再現
+
+【出力形式】
+```html
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{data['name']}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 必要に応じてGoogle Fontsなど -->
+    <style>
+        /* カスタムスタイル */
+    </style>
+</head>
+<body>
+    <!-- 実際のコンテンツ -->
+    <section>
+        <!-- ヒーローセクション、機能紹介など -->
+    </section>
+</body>
+</html>
+```
+
+【注意事項】
+- 色、フォントサイズ、余白など、細部まで元サイトに近づけてください
+- ホバー効果、影、グラデーションなども忠実に再現
+- 画像はプレースホルダーテキストまたは https://via.placeholder.com/ を使用
+"""
+            else:
+                # JSON形式のプロンプト（旧方式）
+                prompt = f"""以下のLP事例を分析し、JSON形式でテンプレートを作成してください。
+
+【基本情報】
+- テンプレート名: {data['name']}
+- カテゴリ: {data['category']}
+- 業種: {data['industry']}
+- 元サイトURL: {data['source_url']}
+- セクションタイプ: {data['section_type']}
+
+【デザインメモ】
+{data['notes']}
+
+【出力形式】
+```json
+{{
+  "name": "{data['name']}",
+  "category": "{data['category']}",
+  "sections": [
+    {{
+      "type": "{data['section_type']}",
+      "content": {{ /* コンテンツの詳細構造 */ }},
+      "layout": {{ /* レイアウト設定 */ }},
+      "background": {{ /* 背景設定 */ }}
+    }}
+  ]
+}}
+```
+"""
+            
+            st.markdown("### 📋 生成されたプロンプト")
+            st.code(prompt, language="text")
+            
+            if st.button("📋 プロンプトをコピー"):
+                st.session_state.generated_prompt = prompt
+                st.success("✅ プロンプトをコピーしました！ChatGPTに貼り付けて出力を取得してください。")
+            
+            st.markdown("---")
+            
+            # 入力エリア（HTML or JSON）
+            if data['template_type'] == 'html':
+                st.markdown("### 📥 ChatGPTからのHTML出力を貼り付け")
+                
+                html_input = st.text_area(
+                    "HTML+CSSコード",
+                    placeholder='<!DOCTYPE html>\n<html lang="ja">\n<head>...',
+                    height=400,
+                    help="ChatGPTが生成した完全なHTMLコードをそのまま貼り付けてください"
+                )
+                
+                if st.button("✅ HTMLを検証してStep 3へ", type="primary"):
+                    # サイズチェック
+                    is_valid_size, size_error = check_html_size(html_input)
+                    if not is_valid_size:
+                        st.error(size_error)
+                    else:
+                        # base64画像チェック
+                        is_no_base64, base64_warning = check_base64_images(html_input)
+                        if not is_no_base64:
+                            st.warning(base64_warning)
+                        
+                        # HTML構造チェック
+                        is_valid_html, html_error = validate_html_structure(html_input)
+                        if not is_valid_html:
+                            st.error(html_error)
+                        else:
+                            # サニタイズ
+                            sanitized = sanitize_user_html(html_input)
+                            
+                            st.session_state.step2_html = {
+                                'original': html_input,
+                                'sanitized': sanitized,
+                                'type': 'html'
+                            }
+                            st.success("✅ HTML検証成功！Step 3でプレビューを確認できます。")
+                            
+                            if not is_no_base64:
+                                st.warning("⚠️ base64画像が検出されましたが、検証は通過しました。可能であればURL参照に変更してください。")
+            
+            else:
+                # JSON入力（旧方式）
+                st.markdown("### 📥 ChatGPTからのJSON出力を貼り付け")
+                
+                json_input = st.text_area(
+                    "JSON出力",
+                    placeholder='{"name": "...", "category": "...", "sections": [...]}',
+                    height=300
+                )
+                
+                if st.button("✅ JSONを検証してStep 3へ", type="primary"):
+                    try:
+                        parsed_json = json.loads(json_input)
+                        st.session_state.step2_html = {
+                            'data': parsed_json,
+                            'type': 'json'
+                        }
+                        st.success("✅ JSON検証成功！Step 3でプレビューを確認できます。")
+                    except json.JSONDecodeError as e:
+                        st.error(f"❌ JSON解析エラー: {str(e)}")
+    
+    # Step 3: プレビュー
+    with tab3:
+        st.header("👀 プレビュー確認")
+        
+        if 'step2_html' not in st.session_state:
+            st.warning("⚠️ まずStep 2でHTML/JSONを入力・検証してください。")
+        else:
+            template_data = st.session_state.step2_html
+            
+            if template_data['type'] == 'html':
+                # HTML形式のプレビュー
+                st.info("**HTML形式のテンプレート**")
+                
+                st.markdown("### 🔍 プレビュー")
+                
+                # HTMLダウンロードボタン
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    st.download_button(
+                        label="💾 HTMLをダウンロード",
+                        data=template_data['original'],
+                        file_name=f"{st.session_state.step1_data.get('name', 'template')}.html",
+                        mime="text/html"
+                    )
+                
+                # iframe内にプレビュー表示（完全隔離）
+                st.components.v1.html(
+                    template_data['sanitized'],
+                    height=800,
+                    scrolling=True
+                )
+                
+                st.success("✅ プレビューが表示されました。問題なければStep 4で保存してください。")
+                
+                # サニタイズ情報の表示
+                with st.expander("🔒 セキュリティ情報"):
+                    st.write("**適用されたサニタイズ処理:**")
+                    st.write("- `<script>`タグの除去")
+                    st.write("- `on*`属性（onclick等）の除去")
+                    st.write("- `javascript:`プロトコルの除去")
+                    st.write("- iframe内に隔離表示（CSS汚染防止）")
+            
+            else:
+                # JSON形式のプレビュー（旧方式）
+                st.info("**JSON形式のテンプレート**")
+                st.warning("⚠️ JSON形式のプレビュー生成は現在未対応です。HTML形式の使用を推奨します。")
+                st.json(template_data['data'])
+    
+    # Step 4: 保存
+    with tab4:
+        st.header("💾 テンプレートを保存")
+        
+        if 'step2_html' not in st.session_state or 'step1_data' not in st.session_state:
+            st.warning("⚠️ まずStep 1-3を完了してください。")
+        else:
+            step1 = st.session_state.step1_data
+            step2 = st.session_state.step2_html
+            
+            # 保存データの作成
+            save_data = {
+                'name': step1['name'],
+                'category': step1['category'],
+                'source_url': step1['source_url'],
+                'industry': step1['industry'],
+                'template_type': step1['template_type'],
+                'notes': step1['notes']
+            }
+            
+            if step2['type'] == 'html':
+                save_data['html_content'] = step2['original']
+                save_data['html_sanitized'] = step2['sanitized']
+            else:
+                save_data['json_data'] = step2['data']
+                save_data['section_type'] = step1.get('section_type')
+            
+            # プレビュー
+            st.subheader("📋 保存内容の確認")
+            st.write(f"**テンプレート名**: {save_data['name']}")
+            st.write(f"**カテゴリ**: {save_data['category']}")
+            st.write(f"**形式**: {save_data['template_type'].upper()}")
+            st.write(f"**元サイト**: {save_data['source_url']}")
+            
+            if save_data['template_type'] == 'html':
+                html_size = len(save_data['html_content'].encode('utf-8')) / 1024
+                st.write(f"**HTMLサイズ**: {html_size:.2f} KB")
+            
+            st.markdown("---")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("💾 下書きとして保存", use_container_width=True):
+                    save_draft(save_data.copy())
+                    st.success("✅ 下書きを保存しました！")
+            
+            with col2:
+                if st.button("✅ 承認して本登録", type="primary", use_container_width=True):
+                    save_template(save_data.copy())
+                    st.success("🎉 テンプレートを本登録しました！")
+                    st.balloons()
+                    
+                    # クリーンアップ
+                    if 'step1_data' in st.session_state:
+                        del st.session_state.step1_data
+                    if 'step2_html' in st.session_state:
+                        del st.session_state.step2_html
+                    
+                    st.info("💡 新しいテンプレートを登録する場合は、Step 1から再度入力してください。")
+    
+    # 保存済みテンプレート一覧
+    st.markdown("---")
+    st.header("📚 保存済みテンプレート一覧")
     
     if not st.session_state.templates:
-        st.warning("⚠️ テンプレートが登録されていません。")
-        if st.button("📝 テンプレート登録モードへ移動"):
-            st.session_state.current_mode = "template_registration"
-            st.rerun()
-        return
-    
-    st.info("💡 登録済みテンプレートを選択して編集できます（開発中）")
+        st.info("まだテンプレートが登録されていません。")
+    else:
+        for template in st.session_state.templates:
+            template_type = template.get('template_type', 'unknown')
+            type_badge = "🌐 HTML" if template_type == 'html' else "📊 JSON"
+            
+            with st.expander(f"{type_badge} {template.get('name', 'Unnamed')} ({template.get('category', 'N/A')})"):
+                col1, col2, col3 = st.columns([2, 2, 1])
+                
+                with col1:
+                    st.write(f"**作成日**: {template.get('created_at', 'N/A')[:10]}")
+                    st.write(f"**業種**: {template.get('industry', 'N/A')}")
+                    if template.get('source_url'):
+                        st.write(f"**元サイト**: {template['source_url']}")
+                
+                with col2:
+                    if template_type == 'html':
+                        html_size = len(template.get('html_content', '').encode('utf-8')) / 1024
+                        st.metric("HTMLサイズ", f"{html_size:.1f} KB")
+                    
+                    if template.get('notes'):
+                        with st.expander("📝 メモを表示"):
+                            st.write(template['notes'])
+                
+                with col3:
+                    if st.button("🗑️ 削除", key=f"del_{template['id']}"):
+                        st.session_state.templates.remove(template)
+                        st.rerun()
+                
+                # プレビュー・ダウンロード
+                if template_type == 'html':
+                    st.download_button(
+                        label="💾 HTMLをダウンロード",
+                        data=template.get('html_content', ''),
+                        file_name=f"{template.get('name', 'template')}.html",
+                        mime="text/html",
+                        key=f"download_{template['id']}"
+                    )
+                    
+                    if st.button("👀 プレビューを表示", key=f"preview_{template['id']}"):
+                        st.components.v1.html(
+                            template.get('html_sanitized', template.get('html_content', '')),
+                            height=600,
+                            scrolling=True
+                        )
 
-if __name__ == "__main__":
-    main()
+else:
+    # デザイン作成モード
+    st.title("🎨 デザイン作成モード")
+    st.info("🚧 デザイン作成モードは開発中です。テンプレート登録モードをご利用ください。")
+
+# フッター
+st.markdown("---")
+st.markdown(f"""
+<div style="text-align: center; color: #6B7280; font-size: 14px; padding: 2rem 0;">
+    <p><strong>LP Template Manager - HTML Edition</strong></p>
+    <p>ChatGPTが生成したHTML+CSSをそのまま使える 🚀</p>
+    <p style="font-size: 12px; margin-top: 1rem;">
+        登録済み: HTML形式 {sum(1 for t in st.session_state.templates if t.get('template_type') == 'html')}件 / 
+        JSON形式 {sum(1 for t in st.session_state.templates if t.get('template_type') == 'json')}件
+    </p>
+</div>
+""", unsafe_allow_html=True)
