@@ -1331,8 +1331,19 @@ def show_template_registration_mode():
                     st.error(f"プレビュー生成エラー: {str(e)}")
             
             with col_preview2:
-                if st.button("🔍 大画面で見る", key="open_preview_modal", use_container_width=True):
-                    st.session_state.show_preview_modal = True
+                st.markdown("💡 **ヒント**: ブラウザで新しいタブを開いてプレビューHTMLを保存して開くことで大画面表示できます。")
+                if st.button("💾 HTMLダウンロード", key="download_preview_html", use_container_width=True):
+                    try:
+                        preview_html = generate_section_preview(st.session_state.temp_template)
+                        st.download_button(
+                            label="⬇️ preview.htmlをダウンロード",
+                            data=preview_html,
+                            file_name="preview.html",
+                            mime="text/html",
+                            use_container_width=True
+                        )
+                    except Exception as e:
+                        st.error(f"エラー: {str(e)}")
             
             st.markdown("### 📄 JSONデータ")
             st.json(st.session_state.temp_template)
@@ -1432,22 +1443,5 @@ def show_design_creation_mode():
     
     st.info("💡 登録済みテンプレートを選択して編集できます（開発中）")
 
-# ===== プレビューモーダル =====
-@st.dialog("🔍 プレビュー（大画面）", width="large")
-def show_preview_modal():
-    if 'temp_template' in st.session_state:
-        try:
-            preview_html = generate_section_preview(st.session_state.temp_template)
-            st.components.v1.html(preview_html, height=800, scrolling=True)
-        except Exception as e:
-            st.error(f"プレビュー生成エラー: {str(e)}")
-    else:
-        st.warning("プレビューするテンプレートがありません。")
-
 if __name__ == "__main__":
     main()
-    
-    # モーダル表示処理
-    if st.session_state.get('show_preview_modal', False):
-        show_preview_modal()
-        st.session_state.show_preview_modal = False
