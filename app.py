@@ -13,225 +13,58 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ===== サイバーパンク風スタイル =====
+# ===== シンプル＆確実スタイル =====
 
 st.markdown("""
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-    /* サイバーパンク背景 */
+    /* 基本設定：白背景 + 黒文字 */
     .stApp {
-        background: linear-gradient(135deg, #0a0e27 0%, #1a1a2e 25%, #16213e 50%, #0a0e27 100%);
-        background-attachment: fixed;
-        position: relative;
-    }
-    
-    .stApp::before {
-        content: "";
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-image: 
-            repeating-linear-gradient(0deg, rgba(255,0,255,0.03) 0px, transparent 2px, transparent 4px),
-            repeating-linear-gradient(90deg, rgba(0,255,255,0.03) 0px, transparent 2px, transparent 4px);
-        pointer-events: none;
-        z-index: 0;
-    }
-    
-    /* グローバルテキストカラー（安全版） */
-    .stApp {
-        color: #e0e7ff;
-    }
-    
-    /* カスタムクラスのみスタイリング */
-    .help-box, .prompt-box, .backup-alert, .cyber-button {
-        color: #e0e7ff;
-    }
-    
-    /* タブスタイル改善 */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background: rgba(30, 30, 60, 0.8);
-        padding: 12px;
-        border-radius: 12px;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(0, 255, 255, 0.2);
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        height: 55px;
-        background: rgba(20, 20, 40, 0.6);
-        border-radius: 8px;
-        padding: 0 24px;
-        font-weight: 600;
-        font-size: 15px;
-        color: #a0aec0 !important;
-        border: 1px solid rgba(100, 100, 150, 0.3);
-        transition: all 0.3s ease;
-    }
-    
-    .stTabs [data-baseweb="tab"]:hover {
-        background: rgba(30, 30, 60, 0.8);
-        border-color: rgba(0, 255, 255, 0.5);
-        box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #00d4ff 0%, #7b2ff7 100%) !important;
-        color: white !important;
-        border-color: transparent;
-        box-shadow: 0 0 30px rgba(0, 212, 255, 0.5);
-    }
-    
-    /* 入力欄スタイル */
-    .stTextInput > div > div > input,
-    .stTextArea > div > div > textarea,
-    .stSelectbox > div > div > div {
-        background: rgba(20, 20, 40, 0.8) !important;
-        border: 1px solid rgba(0, 255, 255, 0.3) !important;
-        color: #e0e7ff !important;
-        border-radius: 8px;
-        font-family: 'Space Mono', monospace;
-        backdrop-filter: blur(10px);
-    }
-    
-    .stTextInput > div > div > input:focus,
-    .stTextArea > div > div > textarea:focus {
-        border-color: rgba(0, 255, 255, 0.8) !important;
-        box-shadow: 0 0 20px rgba(0, 255, 255, 0.3) !important;
-    }
-    
-    /* ラベルスタイル */
-    .stTextInput > label, .stTextArea > label, .stSelectbox > label {
-        font-size: 14px !important;
-        font-weight: 600 !important;
-        color: #00d4ff !important;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 8px !important;
-        text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
-    }
-    
-    /* ボタンスタイル */
-    .stButton > button {
-        background: linear-gradient(135deg, #00d4ff 0%, #7b2ff7 100%);
-        color: white !important;
-        border: none;
-        border-radius: 8px;
-        font-weight: 600;
-        padding: 12px 24px;
-        box-shadow: 0 0 20px rgba(0, 212, 255, 0.4);
-        transition: all 0.3s ease;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
-    }
-    
-    /* プロンプトボックス */
-    .prompt-box {
-        background: rgba(20, 20, 40, 0.9);
-        border: 1px solid rgba(0, 255, 255, 0.3);
-        border-radius: 12px;
-        padding: 20px;
-        font-family: 'Space Mono', monospace;
-        font-size: 13px;
-        line-height: 1.8;
-        color: #00ff88 !important;
-        max-height: 400px;
-        overflow-y: auto;
-        backdrop-filter: blur(10px);
-        box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+        background-color: #ffffff;
+        color: #000000;
     }
     
     /* ヘルプボックス */
     .help-box {
-        background: rgba(0, 100, 255, 0.1);
-        border-left: 4px solid #00d4ff;
+        background-color: #f0f4ff;
+        border-left: 4px solid #3b82f6;
         padding: 16px 20px;
         border-radius: 8px;
         margin: 16px 0;
-        backdrop-filter: blur(10px);
-        box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+        color: #1e293b;
     }
     
     .help-box strong {
-        color: #00d4ff !important;
+        color: #1e40af;
+    }
+    
+    /* プロンプトボックス */
+    .prompt-box {
+        background-color: #f9fafb;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 16px;
+        font-family: monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #111827;
+        max-height: 400px;
+        overflow-y: auto;
     }
     
     /* バックアップアラート */
     .backup-alert {
-        background: linear-gradient(135deg, rgba(0, 255, 136, 0.2) 0%, rgba(0, 212, 255, 0.2) 100%);
-        border: 2px solid rgba(0, 255, 136, 0.5);
-        border-radius: 12px;
-        padding: 24px;
+        background-color: #ecfdf5;
+        border: 2px solid #10b981;
+        border-radius: 8px;
+        padding: 20px;
         margin: 20px 0;
-        backdrop-filter: blur(10px);
-        box-shadow: 0 0 30px rgba(0, 255, 136, 0.3);
+        color: #065f46;
     }
     
     .backup-alert h3 {
-        color: #00ff88 !important;
+        color: #047857;
         margin-bottom: 12px;
-        font-size: 20px;
-        text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-    }
-    
-    /* コピーボタン */
-    .cyber-button {
-        background: linear-gradient(135deg, #00d4ff 0%, #7b2ff7 100%);
-        color: white;
-        border: none;
-        padding: 12px 24px;
-        border-radius: 8px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 0 20px rgba(0, 212, 255, 0.4);
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    
-    .cyber-button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 0 30px rgba(0, 212, 255, 0.6);
-    }
-    
-    /* エクスパンダー */
-    .streamlit-expanderHeader {
-        background: rgba(20, 20, 40, 0.8) !important;
-        border: 1px solid rgba(0, 255, 255, 0.3) !important;
-        border-radius: 8px !important;
-        color: #e0e7ff !important;
-    }
-    
-    /* プレビューiframe */
-    iframe {
-        border: 2px solid rgba(0, 255, 255, 0.5) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 0 40px rgba(0, 212, 255, 0.3) !important;
-    }
-    
-    /* サクセス/エラーメッセージ */
-    .stSuccess, .stError, .stWarning, .stInfo {
-        background: rgba(20, 20, 40, 0.8) !important;
-        border: 1px solid rgba(0, 255, 255, 0.3) !important;
-        border-radius: 8px !important;
-        backdrop-filter: blur(10px);
-    }
-    
-    /* JSONプレビュー */
-    pre {
-        background: rgba(20, 20, 40, 0.9) !important;
-        border: 1px solid rgba(0, 255, 255, 0.3) !important;
-        border-radius: 8px !important;
-        padding: 16px !important;
-        color: #00ff88 !important;
+        font-size: 18px;
     }
 </style>
 """, unsafe_allow_html=True)
