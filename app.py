@@ -2,101 +2,304 @@ import streamlit as st
 import json
 import re
 import html
-from pathlib import Path
 from datetime import datetime
 import uuid
-import base64
 
 # ページ設定
 st.set_page_config(
-    page_title="LP Template Manager - Smart Backup",
-    page_icon="📄", 
+    page_title="LP Template Manager - Final",
+    page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ===== スマートバックアップ機能 =====
+# ===== スタイル定義 =====
 
-def show_smart_backup_alert(template_data):
-    """
-    新規テンプレート作成時のスマートバックアップアラート
-    1クリックでコピー＆ダウンロード機能付き
-    """
-    template_name = template_data.get('name', '新規テンプレート')
+st.markdown("""
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+    .stApp { background-color: #F9FAFB; }
     
-    # アラート表示条件チェック
-    if not st.session_state.get('show_backup_alerts', True):
-        return
+    /* タブスタイル改善 */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #F3F4F6;
+        padding: 8px;
+        border-radius: 8px;
+    }
     
-    # カスタムCSS for アラート
-    st.markdown("""
-    <style>
-    .backup-alert {
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        background-color: white;
+        border-radius: 6px;
+        padding: 0 24px;
+        font-weight: 600;
+        font-size: 15px;
+    }
+    
+    .stTabs [aria-selected="true"] {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white !important;
+    }
+    
+    /* プロンプトボックス */
+    .prompt-box {
+        background: #F9FAFB;
+        border: 2px solid #E5E7EB;
+        border-radius: 8px;
+        padding: 16px;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    /* コピーボタン */
+    .copy-button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .copy-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* バックアップアラート */
+    .backup-alert {
+        background: linear-gradient(135deg, #10B981 0%, #059669 100%);
         border-radius: 12px;
         padding: 20px;
         color: white;
         margin: 15px 0;
-        box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 8px 32px rgba(16, 185, 129, 0.3);
     }
+    
     .backup-alert h3 {
         color: #fff !important;
         margin-bottom: 10px;
+        font-size: 20px;
     }
-    .backup-buttons {
-        display: flex;
-        gap: 10px;
-        margin-top: 15px;
-        flex-wrap: wrap;
-    }
-    .backup-btn {
-        background: rgba(255, 255, 255, 0.2);
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        padding: 8px 16px;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
-        transition: all 0.3s ease;
-    }
-    .backup-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: translateY(-1px);
-    }
-    .copy-success {
-        color: #10B981 !important;
-        font-weight: bold;
-    }
-    </style>
-    """, unsafe_allow_html=True)
     
-    # アラートHTML
+    /* ヘルプボックス */
+    .help-box {
+        background: #EEF2FF;
+        border-left: 4px solid #667eea;
+        padding: 12px 16px;
+        border-radius: 4px;
+        margin: 12px 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# ===== ChatGPT連携プロンプトテンプレート =====
+
+SECTION_PROMPTS = {
+    "hero": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
+
+【基本情報】
+- テンプレート名: {template_name}
+- セクション種別: hero（ヒーローセクション）
+- 参照URL: {reference_url}
+- 説明: {description}
+
+【セクションの特徴】
+heroセクションは、LPのファーストビューを担う最重要セクションです。
+- メインメッセージで価値を即座に伝える
+- ビジュアルで感情に訴える
+- CTAで次のアクションを明確化
+
+【出力すべきJSON項目】
+```json
+{{
+  "main_headline": "メインヘッドライン（20-40文字、顧客の得られる価値を明確に）",
+  "sub_headline": "サブヘッドライン（より具体的な説明、40-80文字）",
+  "description": "詳細説明（100-200文字、具体的なベネフィット）",
+  "cta_primary": "主要CTAボタンテキスト（例: 無料で始める）",
+  "cta_secondary": "副次CTAボタンテキスト（例: 資料請求）",
+  "hero_image_description": "ヒーロー画像の説明（プロダクト画面、利用シーン等）",
+  "trust_elements": ["信頼要素1（例: 導入社数10,000社）", "信頼要素2（例: 満足度98%）"],
+  "background_style": "背景スタイル（gradient/solid/image等）",
+  "layout_type": "レイアウトタイプ（center/left-right/split等）"
+}}
+```
+
+【BtoB SaaS特化の観点】
+- 「誰のどんな課題を解決するか」を明確に
+- 数値やデータで信頼性を担保
+- 無料トライアル/デモ申込みへの導線を重視
+- 企業ロゴや導入実績で権威性を演出
+
+【注意事項】
+- 著作権に配慮し、コピーは抽象化・一般化してください
+- 構造とレイアウトのパターンのみを抽出してください
+- 固有名詞は汎用的な表現に置き換えてください
+
+上記JSON形式で出力してください。
+""",
+    
+    "features": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
+
+【基本情報】
+- テンプレート名: {template_name}
+- セクション種別: features（機能紹介）
+- 参照URL: {reference_url}
+- 説明: {description}
+
+【出力すべきJSON項目】
+```json
+{{
+  "section_title": "セクションタイトル（例: 主要機能）",
+  "introduction": "導入文（機能の全体像を説明）",
+  "features": [
+    {{
+      "title": "機能1のタイトル",
+      "description": "機能1の詳細説明",
+      "icon": "アイコン（例: ⚡）",
+      "benefit": "この機能で得られるベネフィット"
+    }},
+    {{
+      "title": "機能2のタイトル",
+      "description": "機能2の詳細説明",
+      "icon": "アイコン（例: 🎯）",
+      "benefit": "この機能で得られるベネフィット"
+    }}
+  ],
+  "layout_type": "レイアウトタイプ（grid/list等）"
+}}
+```
+
+上記JSON形式で出力してください。
+""",
+    
+    "testimonials": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
+
+【基本情報】
+- テンプレート名: {template_name}
+- セクション種別: testimonials（お客様の声）
+- 参照URL: {reference_url}
+- 説明: {description}
+
+【出力すべきJSON項目】
+```json
+{{
+  "section_title": "セクションタイトル（例: お客様の声）",
+  "testimonials": [
+    {{
+      "quote": "お客様のコメント",
+      "author": "氏名",
+      "company": "企業名",
+      "position": "役職",
+      "avatar_description": "アバター画像の説明（オプション）"
+    }}
+  ]
+}}
+```
+
+上記JSON形式で出力してください。
+""",
+    
+    "social_proof": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
+
+【基本情報】
+- テンプレート名: {template_name}
+- セクション種別: social_proof（導入企業）
+- 参照URL: {reference_url}
+- 説明: {description}
+
+【出力すべきJSON項目】
+```json
+{{
+  "section_title": "セクションタイトル（例: 導入企業）",
+  "companies": ["企業名1", "企業名2", "企業名3"],
+  "stats": {{
+    "total_companies": "導入企業数",
+    "satisfaction_rate": "満足度",
+    "active_users": "アクティブユーザー数"
+  }}
+}}
+```
+
+上記JSON形式で出力してください。
+""",
+    
+    "faq": """以下のLP事例を、テンプレートとして構造化してJSON形式で出力してください。
+
+【基本情報】
+- テンプレート名: {template_name}
+- セクション種別: faq（よくある質問）
+- 参照URL: {reference_url}
+- 説明: {description}
+
+【出力すべきJSON項目】
+```json
+{{
+  "section_title": "セクションタイトル（例: よくある質問）",
+  "questions": [
+    {{
+      "question": "質問1",
+      "answer": "回答1"
+    }},
+    {{
+      "question": "質問2",
+      "answer": "回答2"
+    }}
+  ]
+}}
+```
+
+上記JSON形式で出力してください。
+"""
+}
+
+SECTION_LABELS = {
+    "hero": "ヒーローセクション（ファーストビュー）",
+    "header": "シンプルヘッダー",
+    "trouble": "お悩み・課題提示",
+    "features": "機能紹介",
+    "how_it_works": "利用の流れ",
+    "testimonials": "お客様の声",
+    "social_proof": "導入企業・実績",
+    "pricing": "料金表",
+    "cta": "CTA・申し込みボタン",
+    "faq": "よくある質問"
+}
+
+# ===== スマートバックアップ機能 =====
+
+def show_smart_backup_alert(template_data):
+    """新規テンプレート作成時のスマートバックアップアラート"""
+    if not st.session_state.get('show_backup_alerts', True):
+        return
+    
+    template_name = template_data.get('name', '新規テンプレート')
+    
     alert_html = f"""
     <div class="backup-alert">
         <h3>🎉 テンプレート「{html.escape(template_name)}」を保存しました！</h3>
-        <p>💡 <strong>今すぐバックアップしませんか？</strong> 
+        <p style="margin-bottom: 15px;">💡 <strong>今すぐバックアップしませんか？</strong> 
         データが消失する前に、1クリックで安全に保存できます。</p>
         
-        <div class="backup-buttons">
-            <button class="backup-btn" onclick="copyToClipboard()" id="copyBtn">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button onclick="copyToClipboard()" id="copyBtn" class="copy-button">
                 📋 クリップボードにコピー
             </button>
-            <button class="backup-btn" onclick="downloadTemplate()" id="downloadBtn">
+            <button onclick="downloadTemplate()" id="downloadBtn" class="copy-button">
                 💾 ファイルでダウンロード
             </button>
-            <button class="backup-btn" onclick="copyAllTemplates()" id="copyAllBtn">
-                📦 全テンプレートをコピー
-            </button>
         </div>
-        
-        <p style="font-size: 12px; margin-top: 10px; opacity: 0.8;">
-        💭 このアラートは設定で無効にできます
-        </p>
     </div>
     
     <script>
-    // 個別テンプレートをクリップボードにコピー
     function copyToClipboard() {{
         const templateData = {json.dumps(template_data, ensure_ascii=False)};
         const jsonString = JSON.stringify(templateData, null, 2);
@@ -104,20 +307,13 @@ def show_smart_backup_alert(template_data):
         if (navigator.clipboard) {{
             navigator.clipboard.writeText(jsonString).then(function() {{
                 document.getElementById('copyBtn').innerHTML = '✅ コピー完了！';
-                document.getElementById('copyBtn').classList.add('copy-success');
                 setTimeout(() => {{
                     document.getElementById('copyBtn').innerHTML = '📋 クリップボードにコピー';
-                    document.getElementById('copyBtn').classList.remove('copy-success');
                 }}, 2000);
-            }}).catch(function() {{
-                fallbackCopy(jsonString);
             }});
-        }} else {{
-            fallbackCopy(jsonString);
         }}
     }}
     
-    // 個別テンプレートをダウンロード
     function downloadTemplate() {{
         const templateData = {json.dumps(template_data, ensure_ascii=False)};
         const jsonString = JSON.stringify(templateData, null, 2);
@@ -126,7 +322,7 @@ def show_smart_backup_alert(template_data):
         
         const a = document.createElement('a');
         a.href = url;
-        a.download = `template_{template_data.get('name', 'unnamed').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json`;
+        a.download = 'template_{template_data.get('name', 'unnamed').replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -137,107 +333,41 @@ def show_smart_backup_alert(template_data):
             document.getElementById('downloadBtn').innerHTML = '💾 ファイルでダウンロード';
         }}, 2000);
     }}
-    
-    // 全テンプレートをクリップボードにコピー
-    function copyAllTemplates() {{
-        const allTemplates = {json.dumps(st.session_state.templates, ensure_ascii=False)};
-        const exportData = {{
-            'export_date': new Date().toISOString(),
-            'version': '1.0',
-            'total_templates': Object.keys(allTemplates).length,
-            'templates': allTemplates
-        }};
-        const jsonString = JSON.stringify(exportData, null, 2);
-        
-        if (navigator.clipboard) {{
-            navigator.clipboard.writeText(jsonString).then(function() {{
-                document.getElementById('copyAllBtn').innerHTML = '✅ 全データコピー完了！';
-                setTimeout(() => {{
-                    document.getElementById('copyAllBtn').innerHTML = '📦 全テンプレートをコピー';
-                }}, 2000);
-            }});
-        }}
-    }}
-    
-    // フォールバック用コピー関数
-    function fallbackCopy(text) {{
-        const textArea = document.createElement('textarea');
-        textArea.value = text;
-        document.body.appendChild(textArea);
-        textArea.select();
-        try {{
-            document.execCommand('copy');
-            document.getElementById('copyBtn').innerHTML = '✅ コピー完了！';
-        }} catch (err) {{
-            document.getElementById('copyBtn').innerHTML = '❌ コピー失敗';
-        }}
-        document.body.removeChild(textArea);
-    }}
     </script>
     """
     
     st.markdown(alert_html, unsafe_allow_html=True)
 
 def create_quick_backup_sidebar():
-    """
-    サイドバーのクイックバックアップ機能
-    """
+    """サイドバーのクイックバックアップ機能"""
     st.sidebar.markdown("---")
-    st.sidebar.write("### ⚡ クイックバックアップ")
+    st.sidebar.markdown("### ⚡ クイックバックアップ")
     
     template_count = len(st.session_state.templates) if st.session_state.templates else 0
     
     if template_count > 0:
-        # 1クリック全コピー
-        if st.sidebar.button("📋 全テンプレート即コピー", help="クリップボードに全データをコピー"):
-            show_clipboard_copy_success()
+        st.sidebar.info(f"現在 **{template_count}個** のテンプレートを保存中")
         
-        # 1クリック全ダウンロード  
+        # 全体バックアップ
         backup_data = create_backup_data()
         if backup_data:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"lp_templates_backup_{timestamp}.json"
             
             st.sidebar.download_button(
-                label="💾 全テンプレート即DL",
+                label="💾 全テンプレートをダウンロード",
                 data=backup_data,
                 file_name=filename,
                 mime="application/json",
-                help="ワンクリックで全テンプレートをダウンロード"
+                help="すべてのテンプレートをJSONファイルでダウンロード",
+                use_container_width=True
             )
-        
-        # 最新テンプレートのクイックアクション
-        if st.session_state.templates:
-            latest_template = get_latest_template()
-            if latest_template:
-                st.sidebar.write(f"**最新**: {latest_template.get('name', '無名')[:15]}...")
-                
-                col1, col2 = st.sidebar.columns(2)
-                with col1:
-                    if st.button("📋", key="quick_copy_latest", help="最新テンプレートをコピー"):
-                        show_single_template_copy(latest_template)
-                
-                with col2:
-                    # 個別ダウンロード
-                    template_json = json.dumps(latest_template, ensure_ascii=False, indent=2)
-                    template_name = latest_template.get('name', 'template').replace(' ', '_')
-                    filename = f"template_{template_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-                    
-                    st.download_button(
-                        label="💾",
-                        data=template_json.encode('utf-8'),
-                        file_name=filename,
-                        mime="application/json",
-                        key="quick_dl_latest",
-                        help="最新テンプレートをダウンロード"
-                    )
-    
     else:
-        st.sidebar.info("テンプレートがありません")
+        st.sidebar.info("テンプレートがまだありません")
     
     # アラート設定
     st.sidebar.markdown("---")
-    st.sidebar.write("### ⚙️ アラート設定")
+    st.sidebar.markdown("### ⚙️ 設定")
     
     show_alerts = st.sidebar.checkbox(
         "バックアップアラートを表示",
@@ -245,75 +375,9 @@ def create_quick_backup_sidebar():
         help="新規テンプレート作成時のアラート表示"
     )
     st.session_state.show_backup_alerts = show_alerts
-    
-    auto_backup = st.sidebar.checkbox(
-        "自動バックアップ（localStorage）",
-        value=st.session_state.get('auto_backup', True),
-        help="ブラウザのローカルストレージに自動保存"
-    )
-    st.session_state.auto_backup = auto_backup
-
-def show_clipboard_copy_success():
-    """
-    クリップボードコピー成功の表示
-    """
-    # JavaScriptでクリップボードにコピー
-    all_templates_json = json.dumps({
-        'export_date': datetime.now().isoformat(),
-        'version': '1.0',
-        'total_templates': len(st.session_state.templates),
-        'templates': st.session_state.templates
-    }, ensure_ascii=False, indent=2)
-    
-    copy_js = f"""
-    <script>
-    const data = {json.dumps(all_templates_json)};
-    if (navigator.clipboard) {{
-        navigator.clipboard.writeText(data).then(function() {{
-            alert('✅ 全テンプレートをクリップボードにコピーしました！\\n\\n💡 任意の場所に貼り付けて保存してください。');
-        }}).catch(function() {{
-            console.log('クリップボードコピーに失敗しました');
-        }});
-    }}
-    </script>
-    """
-    st.components.v1.html(copy_js, height=0)
-
-def show_single_template_copy(template):
-    """
-    個別テンプレートのクリップボードコピー
-    """
-    template_json = json.dumps(template, ensure_ascii=False, indent=2)
-    
-    copy_js = f"""
-    <script>
-    const data = {json.dumps(template_json)};
-    if (navigator.clipboard) {{
-        navigator.clipboard.writeText(data).then(function() {{
-            alert('✅ テンプレート「{template.get("name", "無名")}」をコピーしました！');
-        }});
-    }}
-    </script>
-    """
-    st.components.v1.html(copy_js, height=0)
-
-def get_latest_template():
-    """
-    最新のテンプレートを取得
-    """
-    if not st.session_state.templates:
-        return None
-    
-    # created_atでソート
-    templates = list(st.session_state.templates.values())
-    templates.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-    
-    return templates[0] if templates else None
 
 def create_backup_data():
-    """
-    バックアップデータを作成
-    """
+    """バックアップデータを作成"""
     if not st.session_state.templates:
         return None
     
@@ -326,370 +390,341 @@ def create_backup_data():
     
     return json.dumps(export_data, ensure_ascii=False, indent=2).encode('utf-8')
 
-# ===== 自動バックアップシステム =====
-
-def setup_auto_backup():
-    """
-    自動バックアップシステムのセットアップ
-    """
-    if not st.session_state.get('auto_backup', True):
-        return
-    
-    auto_backup_js = f"""
-    <script>
-    // 自動バックアップ関数
-    function autoBackup() {{
-        const templates = {json.dumps(st.session_state.templates)};
-        if (Object.keys(templates).length > 0) {{
-            try {{
-                localStorage.setItem('lp_templates_auto_backup', JSON.stringify({{
-                    timestamp: new Date().toISOString(),
-                    templates: templates
-                }}));
-                console.log('Auto backup completed');
-            }} catch(e) {{
-                console.error('Auto backup failed:', e);
-            }}
-        }}
-    }}
-    
-    // ページ読み込み時とテンプレート変更時に自動バックアップ
-    autoBackup();
-    
-    // 定期的な自動バックアップ（5分間隔）
-    setInterval(autoBackup, 300000);
-    </script>
-    """
-    st.components.v1.html(auto_backup_js, height=0)
-
-def show_backup_status():
-    """
-    バックアップ状況の表示
-    """
-    template_count = len(st.session_state.templates) if st.session_state.templates else 0
-    
-    if template_count > 0:
-        # 最後のバックアップ時刻表示
-        if 'last_backup_time' in st.session_state:
-            last_backup = st.session_state.last_backup_time
-            st.sidebar.success(f"📅 最終バックアップ: {last_backup.strftime('%H:%M:%S')}")
-        
-        # バックアップ推奨アラート
-        if template_count >= 3 and not st.session_state.get('backup_reminded', False):
-            st.sidebar.warning("⚠️ 3個以上のテンプレートがあります。バックアップをお勧めします！")
-            if st.sidebar.button("今すぐバックアップ"):
-                st.session_state.backup_reminded = True
-
-# ===== セキュリティ＆ユーティリティ関数（簡略版） =====
-
-def sanitize_html(content):
-    """HTMLサニタイズ（簡略版）"""
-    if not isinstance(content, str):
-        return str(content)
-    return html.escape(content)
-
-def safe_get_nested(data, path, default=None):
-    """ネストされたJSONから値を安全に取得"""
-    try:
-        if not isinstance(data, dict):
-            return default
-        keys = path.split('.')
-        current = data
-        for key in keys:
-            if isinstance(current, dict) and key in current:
-                current = current[key]
-            else:
-                return default
-        return current if current is not None else default
-    except Exception:
-        return default
+# ===== ユーティリティ関数 =====
 
 def init_session_state():
     """セッションステート初期化"""
     if 'templates' not in st.session_state:
         st.session_state.templates = {}
-    if 'selected_template' not in st.session_state:
-        st.session_state.selected_template = None
     if 'current_mode' not in st.session_state:
         st.session_state.current_mode = "template_registration"
     if 'show_backup_alerts' not in st.session_state:
         st.session_state.show_backup_alerts = True
-    if 'auto_backup' not in st.session_state:
-        st.session_state.auto_backup = True
 
 def save_template(template_data):
-    """
-    テンプレートを安全に保存（スマートアラート付き）
-    """
+    """テンプレートを安全に保存"""
     try:
         if not isinstance(template_data, dict):
-            st.error("無効なテンプレートデータです")
+            st.error("❌ 無効なテンプレートデータです")
             return False
         
         if not template_data.get('name'):
-            st.error("テンプレート名が必要です")
+            st.error("❌ テンプレート名が必要です")
             return False
         
         template_id = str(uuid.uuid4())
         template_data['id'] = template_id
         template_data['created_at'] = datetime.now().isoformat()
         
-        # セッションステートに保存
         st.session_state.templates[template_id] = template_data
-        
-        # 最終バックアップ時刻を更新
-        st.session_state.last_backup_time = datetime.now()
-        
-        # 成功メッセージ（通常のst.success は非表示）
-        # st.success("テンプレートが保存されました")
-        
-        # スマートバックアップアラートを表示
         show_smart_backup_alert(template_data)
         
         return True
     
     except Exception as e:
-        st.error(f"保存エラー: {str(e)}")
+        st.error(f"❌ 保存エラー: {str(e)}")
         return False
-
-# CSS & セクション定義
-st.markdown("""
-<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-<style>
-    .stApp { background-color: #F9FAFB; }
-    iframe { 
-        width: 100% !important; 
-        border: 1px solid #E5E7EB; 
-        border-radius: 12px; 
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-    }
-</style>
-""", unsafe_allow_html=True)
-
-SECTION_CATEGORIES = {
-    "🏠 ヘッダー・導入": {
-        "hero": "ヒーローセクション",
-        "header": "シンプルヘッダー"
-    },
-    "⚡ 課題・価値提案": {
-        "trouble": "お悩み・課題", 
-        "features": "機能紹介",
-        "how_it_works": "利用の流れ"
-    },
-    "🏆 信頼・実績": {
-        "testimonials": "お客様の声",
-        "social_proof": "導入企業"
-    },
-    "💰 料金・申し込み": {
-        "pricing": "料金表",
-        "cta": "CTA・申し込み", 
-        "faq": "よくある質問"
-    }
-}
-
-SECTION_LABELS = {
-    "hero": "ヒーローセクション",
-    "header": "シンプルヘッダー",
-    "trouble": "お悩み・課題", 
-    "features": "機能紹介",
-    "how_it_works": "利用の流れ",
-    "testimonials": "お客様の声", 
-    "social_proof": "導入企業",
-    "pricing": "料金表",
-    "cta": "CTA・申し込み",
-    "faq": "よくある質問"
-}
-
-# ===== 簡易版エディター =====
-
-def show_simple_editor(template):
-    """簡易版エディター"""
-    st.subheader("✏️ テンプレート編集")
-    
-    section_type = template.get('section_type', 'hero')
-    st.write(f"**セクション**: {SECTION_LABELS.get(section_type, section_type)}")
-    
-    # 基本情報編集
-    name = st.text_input("テンプレート名", value=template.get('name', ''), key="edit_name")
-    description = st.text_area("説明", value=template.get('description', ''), key="edit_description")
-    
-    # JSONデータ表示・編集
-    st.write("### 📄 JSONデータ")
-    json_str = json.dumps(template, ensure_ascii=False, indent=2)
-    edited_json = st.text_area("JSONデータ", value=json_str, height=200, key="edit_json")
-    
-    # 保存ボタン
-    if st.button("💾 変更を保存", key="save_changes"):
-        try:
-            # JSON解析
-            updated_data = json.loads(edited_json)
-            updated_data['name'] = name
-            updated_data['description'] = description
-            updated_data['updated_at'] = datetime.now().isoformat()
-            
-            # セッションステートを更新
-            template_id = template.get('id')
-            if template_id and template_id in st.session_state.templates:
-                st.session_state.templates[template_id] = updated_data
-                
-                # 更新成功時もスマートアラート表示
-                show_smart_backup_alert(updated_data)
-                st.rerun()
-            else:
-                st.error("テンプレートIDが見つかりません")
-        
-        except json.JSONDecodeError as e:
-            st.error(f"JSON形式が正しくありません: {str(e)}")
-        except Exception as e:
-            st.error(f"保存エラー: {str(e)}")
 
 # ===== メインアプリケーション =====
 
 def main():
-    """メインアプリケーション（スマートバックアップ版）"""
-    try:
-        # セッション初期化
-        init_session_state()
-        
-        # 自動バックアップセットアップ
-        setup_auto_backup()
-        
-        # ヘッダー
-        st.title("⚡ LP Template Manager - Smart Backup")
-        st.markdown("**1クリックバックアップ・自動保存機能付き**")
-        
-        # サイドバー
-        with st.sidebar:
-            st.header("🎛️ 操作パネル")
-            
-            mode = st.selectbox(
-                "モード選択",
-                ["template_registration", "design_creation"],
-                format_func=lambda x: "📝 テンプレート登録" if x == "template_registration" else "🎨 デザイン作成",
-                key="mode_selector"
-            )
-            
-            st.session_state.current_mode = mode
-            
-            # クイックバックアップUI
-            create_quick_backup_sidebar()
-            
-            # バックアップ状況表示
-            show_backup_status()
-        
-        # モード別処理
-        if st.session_state.current_mode == "template_registration":
-            show_template_registration_mode()
-        else:
-            show_design_creation_mode()
+    """メインアプリケーション"""
+    init_session_state()
     
-    except Exception as e:
-        st.error(f"アプリケーションエラー: {str(e)}")
+    st.title("📄 LP Template Manager")
+    st.markdown("**BtoB SaaS特化のLPテンプレート管理ツール - 1クリックバックアップ・自動保存機能付き**")
+    
+    with st.sidebar:
+        st.markdown("## 🎛️ 操作パネル")
+        
+        mode = st.radio(
+            "モードを選択してください",
+            ["template_registration", "design_creation"],
+            format_func=lambda x: "📝 テンプレート登録" if x == "template_registration" else "🎨 デザイン作成",
+            key="mode_selector"
+        )
+        
+        st.session_state.current_mode = mode
+        create_quick_backup_sidebar()
+    
+    if st.session_state.current_mode == "template_registration":
+        show_template_registration_mode()
+    else:
+        show_design_creation_mode()
 
 def show_template_registration_mode():
-    """テンプレート登録モード"""
-    st.header("📝 テンプレート登録モード")
+    """テンプレート登録モード（タブ切り替え式）"""
     
-    col1, col2 = st.columns(2)
+    st.markdown("""
+    <div class="help-box">
+        💡 <strong>使い方:</strong> 4つのステップでテンプレートを登録します<br>
+        ① 基本情報入力 → ② プロンプト生成・ChatGPTへコピー → ③ JSONデータ入力 → ④ 保存
+    </div>
+    """, unsafe_allow_html=True)
     
-    with col1:
-        template_name = st.text_input("テンプレート名", key="template_name")
-        reference_url = st.text_input("参考URL", key="reference_url")
+    # タブ定義
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📝 Step 1: 基本情報",
+        "🤖 Step 2: プロンプト生成",
+        "📋 Step 3: JSONデータ入力",
+        "💾 Step 4: 保存・管理"
+    ])
     
-    with col2:
-        section_type = st.selectbox(
-            "セクション種別",
-            list(SECTION_LABELS.keys()),
-            format_func=lambda x: SECTION_LABELS[x],
-            key="section_type"
-        )
-        description = st.text_area("説明", key="template_description")
+    # ===== Step 1: 基本情報 =====
+    with tab1:
+        st.markdown("### 📌 テンプレートの基本情報を入力")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### テンプレート名")
+            st.caption("分かりやすい名前を付けてください（例: 「Slack風ヒーロー」）")
+            template_name = st.text_input(
+                "テンプレート名",
+                placeholder="例: Slack風ヒーローセクション",
+                key="template_name",
+                label_visibility="collapsed"
+            )
+            
+            st.markdown("#### 参考URL")
+            st.caption("参考にしたLP事例のURL（任意）")
+            reference_url = st.text_input(
+                "参考URL",
+                placeholder="https://example.com/landing-page",
+                key="reference_url",
+                label_visibility="collapsed"
+            )
+        
+        with col2:
+            st.markdown("#### セクション種別")
+            st.caption("どの部分のテンプレートか選択してください")
+            section_type = st.selectbox(
+                "セクション種別",
+                list(SECTION_LABELS.keys()),
+                format_func=lambda x: SECTION_LABELS[x],
+                key="section_type",
+                label_visibility="collapsed"
+            )
+            
+            st.markdown("#### 説明")
+            st.caption("このテンプレートの特徴や使いどころ（任意）")
+            description = st.text_area(
+                "説明",
+                placeholder="例: 大手SaaS企業風のシンプルで分かりやすいレイアウト",
+                key="template_description",
+                height=100,
+                label_visibility="collapsed"
+            )
+        
+        st.success("✅ 基本情報の入力が完了しました！次は「Step 2: プロンプト生成」タブに進んでください。")
     
-    # JSON入力
-    json_input = st.text_area("JSONデータを入力", height=150, key="json_input")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        if st.button("📋 JSONをパース", key="parse_json"):
-            try:
-                if json_input.strip():
-                    parsed_data = json.loads(json_input)
-                    
-                    template_data = {
-                        'name': template_name or f"テンプレート_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-                        'section_type': section_type,
-                        'reference_url': reference_url,
-                        'description': description,
-                        'created_at': datetime.now().isoformat(),
-                        **parsed_data
-                    }
-                    
-                    st.session_state.temp_template = template_data
-                    st.success("JSONデータをパースしました！")
-                else:
-                    st.error("JSONデータを入力してください")
-                    
-            except json.JSONDecodeError as e:
-                st.error(f"JSON解析エラー: {str(e)}")
-    
-    with col2:
-        if st.button("💾 テンプレート保存", key="save_template"):
-            if 'temp_template' in st.session_state:
-                success = save_template(st.session_state.temp_template)
-                if success:
-                    # temp_templateを削除（スマートアラート表示後）
-                    if 'temp_template' in st.session_state:
-                        del st.session_state.temp_template
+    # ===== Step 2: プロンプト生成 =====
+    with tab2:
+        st.markdown("### 🤖 ChatGPTに投げるプロンプトを生成")
+        
+        st.markdown("""
+        <div class="help-box">
+            💡 <strong>このステップでやること:</strong><br>
+            1. 下記の「プロンプトを生成」ボタンをクリック<br>
+            2. 生成されたプロンプトを「コピー」ボタンでコピー<br>
+            3. ChatGPTに貼り付けて、JSONデータを取得<br>
+            4. 取得したJSONを「Step 3」で入力
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # プロンプト生成ボタン
+        if st.button("🚀 プロンプトを生成", key="generate_prompt", type="primary", use_container_width=True):
+            template_name = st.session_state.get('template_name', 'サンプルテンプレート')
+            section_type = st.session_state.get('section_type', 'hero')
+            reference_url = st.session_state.get('reference_url', 'https://example.com')
+            description = st.session_state.get('template_description', '説明なし')
+            
+            # プロンプトテンプレートから生成
+            if section_type in SECTION_PROMPTS:
+                prompt = SECTION_PROMPTS[section_type].format(
+                    template_name=template_name,
+                    reference_url=reference_url,
+                    description=description
+                )
+                
+                st.session_state.generated_prompt = prompt
             else:
-                st.error("先にJSONをパースしてください")
+                st.warning(f"⚠️ セクション「{section_type}」のプロンプトテンプレートがまだ用意されていません。")
+        
+        # 生成されたプロンプトを表示
+        if 'generated_prompt' in st.session_state:
+            st.markdown("### 📄 生成されたプロンプト")
+            st.markdown(f'<div class="prompt-box">{html.escape(st.session_state.generated_prompt)}</div>', unsafe_allow_html=True)
+            
+            # コピーボタン
+            copy_js = f"""
+            <button onclick="copyPrompt()" id="copyPromptBtn" class="copy-button" style="margin-top: 12px;">
+                📋 プロンプトをコピー
+            </button>
+            
+            <script>
+            function copyPrompt() {{
+                const promptText = {json.dumps(st.session_state.generated_prompt)};
+                
+                if (navigator.clipboard) {{
+                    navigator.clipboard.writeText(promptText).then(function() {{
+                        document.getElementById('copyPromptBtn').innerHTML = '✅ コピーしました！ChatGPTに貼り付けてください';
+                        setTimeout(() => {{
+                            document.getElementById('copyPromptBtn').innerHTML = '📋 プロンプトをコピー';
+                        }}, 3000);
+                    }});
+                }}
+            }}
+            </script>
+            """
+            st.markdown(copy_js, unsafe_allow_html=True)
+            
+            st.success("✅ プロンプトをコピーして、ChatGPTに貼り付けてください！取得したJSONを「Step 3」で入力します。")
     
-    # 保存済みテンプレート一覧
-    if st.session_state.templates:
-        st.write("### 📚 保存済みテンプレート")
-        for template_id, template in st.session_state.templates.items():
-            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-            with col1:
-                st.write(f"**{template.get('name', '無名')}** ({SECTION_LABELS.get(template.get('section_type', 'unknown'), '不明')})")
-            with col2:
-                if st.button("編集", key=f"edit_{template_id}"):
-                    st.session_state.selected_template = template_id
-                    st.session_state.current_mode = "design_creation"
-                    st.rerun()
-            with col3:
-                # 個別コピー
-                if st.button("📋", key=f"copy_{template_id}", help="コピー"):
-                    show_single_template_copy(template)
-            with col4:
-                if st.button("🗑️", key=f"delete_{template_id}", help="削除"):
-                    del st.session_state.templates[template_id]
-                    st.rerun()
+    # ===== Step 3: JSONデータ入力 =====
+    with tab3:
+        st.markdown("### 📋 ChatGPTから取得したJSONデータを入力")
+        
+        st.markdown("""
+        <div class="help-box">
+            💡 <strong>このステップでやること:</strong><br>
+            1. ChatGPTから取得したJSONデータをそのままコピー<br>
+            2. 下記のテキストエリアに貼り付け<br>
+            3. 「JSONをパース」ボタンでプレビュー確認
+        </div>
+        """, unsafe_allow_html=True)
+        
+        st.markdown("#### JSONデータ")
+        st.caption("ChatGPTから取得したJSONデータをここに貼り付けてください")
+        json_input = st.text_area(
+            "JSONデータ",
+            placeholder='''{
+  "main_headline": "チームコミュニケーションを、もっと楽しく",
+  "sub_headline": "Slackは、チームの生産性を向上させるコラボレーションツールです",
+  "description": "メール、チャット、ファイル共有を1つに。",
+  "cta_primary": "無料で始める",
+  "trust_elements": ["導入企業数10,000社", "満足度98%"]
+}''',
+            height=250,
+            key="json_input",
+            label_visibility="collapsed"
+        )
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("📋 JSONをパース", key="parse_json", use_container_width=True):
+                try:
+                    if json_input.strip():
+                        parsed_data = json.loads(json_input)
+                        
+                        template_name = st.session_state.get('template_name', f"テンプレート_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+                        section_type = st.session_state.get('section_type', 'hero')
+                        reference_url = st.session_state.get('reference_url', '')
+                        description = st.session_state.get('template_description', '')
+                        
+                        template_data = {
+                            'name': template_name,
+                            'section_type': section_type,
+                            'reference_url': reference_url,
+                            'description': description,
+                            'created_at': datetime.now().isoformat(),
+                            **parsed_data
+                        }
+                        
+                        st.session_state.temp_template = template_data
+                        st.success("✅ JSONデータをパースしました！下記でプレビューを確認してください。")
+                    else:
+                        st.error("❌ JSONデータを入力してください")
+                        
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ JSON解析エラー: {str(e)}")
+                    st.info("💡 ヒント: JSONの形式が正しいか確認してください")
+                except Exception as e:
+                    st.error(f"❌ エラー: {str(e)}")
+        
+        with col2:
+            if st.button("🔄 入力をクリア", key="clear_json", use_container_width=True):
+                st.session_state.json_input = ""
+                st.rerun()
+        
+        # プレビュー表示
+        if 'temp_template' in st.session_state:
+            st.markdown("### 👀 プレビュー")
+            st.json(st.session_state.temp_template)
+            st.success("✅ パース成功！「Step 4: 保存・管理」タブで保存してください。")
+    
+    # ===== Step 4: 保存・管理 =====
+    with tab4:
+        st.markdown("### 💾 テンプレートの保存・管理")
+        
+        # 保存ボタン
+        col1, col2, col3 = st.columns([1, 1, 2])
+        
+        with col1:
+            if st.button("💾 テンプレート保存", key="save_template", type="primary", use_container_width=True):
+                if 'temp_template' in st.session_state:
+                    success = save_template(st.session_state.temp_template)
+                    if success:
+                        if 'temp_template' in st.session_state:
+                            del st.session_state.temp_template
+                        st.rerun()
+                else:
+                    st.error("❌ 先にStep 3でJSONをパースしてください")
+        
+        with col2:
+            if st.button("🗑️ 作業をクリア", key="clear_all", use_container_width=True):
+                keys_to_clear = ['template_name', 'reference_url', 'section_type', 'template_description', 
+                                'json_input', 'temp_template', 'generated_prompt']
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.success("✅ 作業内容をクリアしました")
+                st.rerun()
+        
+        # 保存済みテンプレート一覧
+        if st.session_state.templates:
+            st.markdown("---")
+            st.markdown("### 📚 保存済みテンプレート一覧")
+            
+            for template_id, template in st.session_state.templates.items():
+                with st.expander(f"📄 {template.get('name', '無名')} - {SECTION_LABELS.get(template.get('section_type', 'unknown'), '不明')}"):
+                    col1, col2, col3 = st.columns([2, 1, 1])
+                    
+                    with col1:
+                        st.write(f"**作成日時:** {template.get('created_at', 'N/A')[:19]}")
+                        if template.get('description'):
+                            st.write(f"**説明:** {template.get('description')}")
+                        if template.get('reference_url'):
+                            st.write(f"**参考URL:** {template.get('reference_url')}")
+                    
+                    with col2:
+                        if st.button("🎨 編集", key=f"edit_{template_id}", use_container_width=True):
+                            st.session_state.selected_template = template_id
+                            st.session_state.current_mode = "design_creation"
+                            st.rerun()
+                    
+                    with col3:
+                        if st.button("🗑️ 削除", key=f"delete_{template_id}", use_container_width=True):
+                            del st.session_state.templates[template_id]
+                            st.success("✅ テンプレートを削除しました")
+                            st.rerun()
+                    
+                    with st.expander("📄 JSONデータを表示"):
+                        st.json(template)
 
 def show_design_creation_mode():
     """デザイン作成モード"""
-    st.header("🎨 デザイン作成モード")
+    st.markdown("### 🎨 デザイン作成モード")
     
     if not st.session_state.templates:
-        st.warning("テンプレートが登録されていません。まずはテンプレート登録モードでテンプレートを作成してください。")
+        st.warning("⚠️ テンプレートが登録されていません。")
+        if st.button("📝 テンプレート登録モードへ移動"):
+            st.session_state.current_mode = "template_registration"
+            st.rerun()
         return
     
-    # テンプレート選択
-    template_options = {
-        template_id: f"{template.get('name', '無名')} ({SECTION_LABELS.get(template.get('section_type', 'unknown'), '不明')})"
-        for template_id, template in st.session_state.templates.items()
-    }
-    
-    selected_id = st.selectbox(
-        "編集するテンプレートを選択",
-        list(template_options.keys()),
-        format_func=lambda x: template_options[x],
-        key="template_selector"
-    )
-    
-    if selected_id:
-        template = st.session_state.templates[selected_id]
-        show_simple_editor(template)
+    st.info("💡 登録済みテンプレートを選択して編集できます（開発中）")
 
 if __name__ == "__main__":
     main()
