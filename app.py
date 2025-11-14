@@ -233,107 +233,315 @@ def generate_section_preview(template):
         return "<p>プレビュー生成中...</p>"
 
 def generate_hero_preview(template):
-    """ヒーローセクションのプレビュー生成"""
-    title = template.get('title', 'タイトル')
-    subtitle = template.get('subtitle', 'サブタイトル')
-    description = template.get('description', '説明文')
-    cta_primary = template.get('cta_primary', '無料で始める')
-    cta_secondary = template.get('cta_secondary', '資料請求')
-    trust_elements = template.get('trust_elements', [])
+    """
+    freee風の詳細JSON構造に完全対応したヒーローセクションプレビュー生成
+    
+    対応する構造：
+    - content.main_title (テンプレート変数、フォントサイズ、色、改行位置)
+    - content.subtitle (テンプレート変数、フォントサイズ、色)
+    - content.cta_section (ボタン配置、サイズ、色、ラベル)
+    - content.trust_badges (市場シェア、ユーザー数バッジ)
+    - layout (左右分割、幅指定、パディング)
+    - background (グラデーション、色指定)
+    - right_visual (プロダクト画像エリア)
+    """
+    
+    # === 基本情報取得 ===
+    content = template.get('content', {})
+    layout = template.get('layout', {})
+    background = template.get('background', {})
+    variables = template.get('variables', {})
+    
+    # === タイトル情報 ===
+    main_title_data = content.get('main_title', {})
+    title_template = main_title_data.get('template', '{{業務名}}を、{{ターゲット}}、{{理想状態}}。')
+    title_example = main_title_data.get('example', 'タイトル')
+    title_font_size = main_title_data.get('font_size', '56px')
+    title_color = main_title_data.get('color', '#333333')
+    title_line_height = main_title_data.get('line_height', '1.4')
+    
+    # 変数置換
+    title_text = title_example
+    for key, value in variables.items():
+        title_text = title_text.replace(f'{{{{{key}}}}}', value)
+    
+    # === サブタイトル情報 ===
+    subtitle_data = content.get('subtitle', {})
+    subtitle_example = subtitle_data.get('example', 'サブタイトル')
+    subtitle_font_size = subtitle_data.get('font_size', '18px')
+    subtitle_color = subtitle_data.get('color', '#666666')
+    subtitle_line_height = subtitle_data.get('line_height', '1.8')
+    subtitle_max_width = subtitle_data.get('max_width', '600px')
+    
+    subtitle_text = subtitle_example
+    for key, value in variables.items():
+        subtitle_text = subtitle_text.replace(f'{{{{{key}}}}}', value)
+    
+    # === CTA情報 ===
+    cta_section = content.get('cta_section', {})
+    buttons = cta_section.get('buttons', [])
+    
+    cta_html = ""
+    if buttons:
+        cta_items = []
+        for btn in buttons:
+            btn_type = btn.get('type', 'primary')
+            label_above = btn.get('label_above', {})
+            btn_text = btn.get('text', 'ボタン')
+            btn_width = btn.get('width', '240px')
+            btn_height = btn.get('height', '64px')
+            btn_font_size = btn.get('font_size', '18px')
+            btn_bg = btn.get('background', '#0066FF')
+            btn_color = btn.get('color', '#FFFFFF')
+            btn_border = btn.get('border', 'none')
+            btn_border_radius = btn.get('border_radius', '32px')
+            
+            label_html = ""
+            if label_above:
+                label_text = label_above.get('text', '')
+                label_size = label_above.get('font_size', '12px')
+                label_color = label_above.get('color', '#666666')
+                label_html = f"""
+                <div style='font-size: {label_size}; color: {label_color}; margin-bottom: 8px;'>
+                    {label_text}
+                </div>
+                """
+            
+            cta_items.append(f"""
+            <div style='display: flex; flex-direction: column; align-items: flex-start;'>
+                {label_html}
+                <button style='
+                    width: {btn_width};
+                    height: {btn_height};
+                    font-size: {btn_font_size};
+                    font-weight: bold;
+                    background: {btn_bg};
+                    color: {btn_color};
+                    border: {btn_border};
+                    border-radius: {btn_border_radius};
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                '>
+                    {btn_text}
+                </button>
+            </div>
+            """)
+        
+        cta_gap = cta_section.get('gap', '16px')
+        cta_html = f"""
+        <div style='display: flex; gap: {cta_gap}; margin-bottom: 40px; flex-wrap: wrap;'>
+            {''.join(cta_items)}
+        </div>
+        """
+    
+    # === Trust Badges ===
+    trust_badges_data = content.get('trust_badges', {})
+    trust_items = trust_badges_data.get('items', [])
     
     trust_html = ""
-    if trust_elements:
-        badges = [f"<span style='background: rgba(59, 130, 246, 0.2); color: #60a5fa; padding: 8px 16px; border-radius: 20px; font-size: 14px; border: 1px solid rgba(59, 130, 246, 0.3);'>{elem}</span>" 
-                 for elem in trust_elements]
-        trust_html = f"<div style='display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 24px;'>{''.join(badges)}</div>"
-    
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-        <style>
-            * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-            body {{ 
-                font-family: 'Inter', sans-serif; 
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                min-height: 100vh;
+    if trust_items:
+        badge_html_list = []
+        for item in trust_items:
+            item_type = item.get('type', 'badge')
+            text_example = item.get('text_example', '')
+            font_size = item.get('font_size', '14px')
+            width = item.get('width', '180px')
+            height = item.get('height', '120px')
+            bg = item.get('background', '#F8F9FA')
+            border_radius = item.get('border_radius', '12px')
+            padding = item.get('padding', '16px')
+            
+            # 改行を<br>に変換
+            text_display = text_example.replace('\n', '<br>')
+            
+            badge_html_list.append(f"""
+            <div style='
+                width: {width};
+                height: {height};
+                background: {bg};
+                border-radius: {border_radius};
+                padding: {padding};
                 display: flex;
+                flex-direction: column;
                 align-items: center;
                 justify-content: center;
-                padding: 40px;
-            }}
-            .container {{
-                max-width: 1200px;
                 text-align: center;
-                color: white;
-            }}
-            h1 {{
-                font-size: clamp(2rem, 5vw, 4rem);
-                font-weight: 800;
-                margin-bottom: 24px;
-                line-height: 1.2;
-            }}
-            .subtitle {{
-                font-size: clamp(1rem, 2vw, 1.5rem);
-                color: rgba(255, 255, 255, 0.9);
-                margin-bottom: 16px;
-                font-weight: 500;
-            }}
-            .description {{
-                font-size: 1.1rem;
-                color: rgba(255, 255, 255, 0.8);
-                margin-bottom: 32px;
-                max-width: 800px;
-                margin-left: auto;
-                margin-right: auto;
-            }}
-            .cta-buttons {{
-                display: flex;
-                gap: 16px;
-                justify-content: center;
-                flex-wrap: wrap;
-                margin-bottom: 24px;
-            }}
-            .cta-primary {{
-                background: white;
-                color: #667eea;
-                padding: 16px 48px;
-                border-radius: 12px;
-                font-weight: 700;
-                font-size: 1.1rem;
-                border: none;
-                cursor: pointer;
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-            }}
-            .cta-secondary {{
-                background: rgba(255, 255, 255, 0.1);
-                color: white;
-                padding: 16px 48px;
-                border-radius: 12px;
-                font-weight: 700;
-                font-size: 1.1rem;
-                border: 2px solid white;
-                cursor: pointer;
-                backdrop-filter: blur(10px);
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>{title}</h1>
-            <div class="subtitle">{subtitle}</div>
-            <div class="description">{description}</div>
-            <div class="cta-buttons">
-                <button class="cta-primary">{cta_primary}</button>
-                <button class="cta-secondary">{cta_secondary}</button>
+                font-size: {font_size};
+                font-weight: bold;
+            '>
+                {text_display}
             </div>
-            {trust_html}
+            """)
+        
+        trust_gap = trust_badges_data.get('gap', '32px')
+        trust_html = f"""
+        <div style='display: flex; gap: {trust_gap}; flex-wrap: wrap;'>
+            {''.join(badge_html_list)}
         </div>
-    </body>
-    </html>
-    """
+        """
+    
+    # === レイアウト情報 ===
+    layout_structure = layout.get('structure', 'center_aligned')
+    left_column = layout.get('left_column', {})
+    right_column = layout.get('right_column', {})
+    
+    left_width = left_column.get('width', '45%')
+    left_padding = left_column.get('padding', '80px 60px')
+    left_alignment = left_column.get('alignment', 'left')
+    
+    right_width = right_column.get('width', '55%')
+    
+    # === 背景情報 ===
+    bg_type = background.get('type', 'gradient')
+    bg_colors = background.get('colors', [
+        {"position": "0%", "color": "#E3F2FD"},
+        {"position": "50%", "color": "#F5F5FF"},
+        {"position": "100%", "color": "#FFFFFF"}
+    ])
+    
+    # グラデーション生成
+    gradient_stops = ', '.join([f"{c['color']} {c['position']}" for c in bg_colors])
+    bg_direction = background.get('direction', 'diagonal_top_left_to_bottom_right')
+    
+    # 方向マッピング
+    direction_map = {
+        'diagonal_top_left_to_bottom_right': '135deg',
+        'vertical': '180deg',
+        'horizontal': '90deg'
+    }
+    bg_gradient = f"linear-gradient({direction_map.get(bg_direction, '135deg')}, {gradient_stops})"
+    
+    # === HTML生成 ===
+    if layout_structure == 'two_column_split':
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{ 
+                    font-family: 'Inter', sans-serif; 
+                    background: {bg_gradient};
+                    min-height: 100vh;
+                }}
+                .hero-container {{
+                    display: flex;
+                    min-height: 100vh;
+                    align-items: center;
+                }}
+                .left-column {{
+                    width: {left_width};
+                    padding: {left_padding};
+                    text-align: {left_alignment};
+                }}
+                .right-column {{
+                    width: {right_width};
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 40px;
+                }}
+                .main-title {{
+                    font-size: {title_font_size};
+                    font-weight: bold;
+                    color: {title_color};
+                    line-height: {title_line_height};
+                    margin-bottom: 32px;
+                    white-space: pre-line;
+                }}
+                .subtitle {{
+                    font-size: {subtitle_font_size};
+                    color: {subtitle_color};
+                    line-height: {subtitle_line_height};
+                    max-width: {subtitle_max_width};
+                    margin-bottom: 48px;
+                }}
+                .right-visual {{
+                    width: 600px;
+                    height: 400px;
+                    background: rgba(255, 255, 255, 0.5);
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #999;
+                    font-size: 16px;
+                    border: 2px dashed #ccc;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="hero-container">
+                <div class="left-column">
+                    <h1 class="main-title">{title_text}</h1>
+                    <div class="subtitle">{subtitle_text}</div>
+                    {cta_html}
+                    {trust_html}
+                </div>
+                <div class="right-column">
+                    <div class="right-visual">
+                        プロダクト画像エリア
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+    else:
+        # 中央配置のフォールバック
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{ 
+                    font-family: 'Inter', sans-serif; 
+                    background: {bg_gradient};
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 40px;
+                }}
+                .container {{
+                    max-width: 1200px;
+                    text-align: center;
+                }}
+                .main-title {{
+                    font-size: {title_font_size};
+                    font-weight: bold;
+                    color: {title_color};
+                    line-height: {title_line_height};
+                    margin-bottom: 32px;
+                }}
+                .subtitle {{
+                    font-size: {subtitle_font_size};
+                    color: {subtitle_color};
+                    line-height: {subtitle_line_height};
+                    margin-bottom: 48px;
+                    margin-left: auto;
+                    margin-right: auto;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 class="main-title">{title_text}</h1>
+                <div class="subtitle">{subtitle_text}</div>
+                {cta_html}
+                {trust_html}
+            </div>
+        </body>
+        </html>
+        """
+
+
+# テスト用
 
 def generate_features_preview(template):
     """機能セクションのプレビュー生成"""
